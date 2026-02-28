@@ -7,24 +7,28 @@ transmission over ZMQ sockets.
 """
 
 import json
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
-from typing import Optional
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 
 from common.constants import (
-    SENSOR_TYPE_CAMERA, SENSOR_TYPE_INDUCTIVE, SENSOR_TYPE_GPS,
-    CONGESTION_ALTA, CONGESTION_NORMAL, CONGESTION_BAJA,
-    CONGESTION_ALTA_MAX_SPEED, CONGESTION_BAJA_MIN_SPEED,
+    CONGESTION_ALTA,
+    CONGESTION_ALTA_MAX_SPEED,
+    CONGESTION_BAJA,
+    CONGESTION_BAJA_MIN_SPEED,
+    CONGESTION_NORMAL,
+    SENSOR_TYPE_CAMERA,
+    SENSOR_TYPE_GPS,
+    SENSOR_TYPE_INDUCTIVE,
 )
-
 
 # =============================================================================
 # Utility Functions
 # =============================================================================
 
+
 def now_iso() -> str:
     """Return current UTC timestamp in ISO 8601 format."""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def to_json(obj) -> str:
@@ -56,16 +60,18 @@ def get_congestion_level(velocidad_promedio: float) -> str:
 # Sensor Event Models
 # =============================================================================
 
+
 @dataclass
 class CameraEvent:
     """
     Event from a camera sensor (EVENTO_LONGITUD_COLA - Lq).
     Measures queue length (vehicles waiting) and average speed at an intersection.
     """
+
     sensor_id: str
     tipo_sensor: str = field(default=SENSOR_TYPE_CAMERA)
     interseccion: str = ""
-    volumen: int = 0               # Number of vehicles waiting at semaphore
+    volumen: int = 0  # Number of vehicles waiting at semaphore
     velocidad_promedio: float = 0.0  # Average speed in km/h (max 50)
     timestamp: str = field(default_factory=now_iso)
 
@@ -83,11 +89,12 @@ class InductiveEvent:
     Event from an inductive loop sensor (EVENTO_CONTEO_VEHICULAR - Cv).
     Counts vehicles that have passed over the loop in a time interval.
     """
+
     sensor_id: str
     tipo_sensor: str = field(default=SENSOR_TYPE_INDUCTIVE)
     interseccion: str = ""
-    vehiculos_contados: int = 0    # Vehicles counted over the loop
-    intervalo_segundos: int = 30   # Measurement interval (matches semaphore cycle)
+    vehiculos_contados: int = 0  # Vehicles counted over the loop
+    intervalo_segundos: int = 30  # Measurement interval (matches semaphore cycle)
     timestamp_inicio: str = field(default_factory=now_iso)
     timestamp_fin: str = ""
 
@@ -105,6 +112,7 @@ class GPSEvent:
     Event from a GPS sensor (EVENTO_DENSIDAD_DE_TRAFICO - Dt).
     Reports traffic density and congestion level based on average speed.
     """
+
     sensor_id: str
     tipo_sensor: str = field(default=SENSOR_TYPE_GPS)
     interseccion: str = ""
@@ -128,16 +136,18 @@ class GPSEvent:
 # Semaphore Command Model
 # =============================================================================
 
+
 @dataclass
 class SemaphoreCommand:
     """
     Command sent from the analytics service to the semaphore control service.
     Instructs a semaphore to change its state.
     """
+
     interseccion: str
-    new_state: str                   # "GREEN" or "RED"
-    reason: str = ""                 # Why the change is being made
-    duration_override_sec: Optional[int] = None  # Custom duration (None = default)
+    new_state: str  # "GREEN" or "RED"
+    reason: str = ""  # Why the change is being made
+    duration_override_sec: int | None = None  # Custom duration (None = default)
     timestamp: str = field(default_factory=now_iso)
 
     def to_json(self) -> str:
@@ -152,19 +162,21 @@ class SemaphoreCommand:
 # Monitoring Query / Response Models
 # =============================================================================
 
+
 @dataclass
 class MonitoringQuery:
     """
     Query sent from the monitoring service (PC3) to the analytics service (PC2).
     """
-    command: str                     # Command type (see constants CMD_*)
-    interseccion: Optional[str] = None
-    timestamp_inicio: Optional[str] = None
-    timestamp_fin: Optional[str] = None
-    row: Optional[str] = None        # For green wave: row letter (e.g., "B")
-    column: Optional[int] = None     # For green wave: column number (e.g., 3)
-    new_state: Optional[str] = None  # For force semaphore change
-    reason: Optional[str] = None
+
+    command: str  # Command type (see constants CMD_*)
+    interseccion: str | None = None
+    timestamp_inicio: str | None = None
+    timestamp_fin: str | None = None
+    row: str | None = None  # For green wave: row letter (e.g., "B")
+    column: int | None = None  # For green wave: column number (e.g., 3)
+    new_state: str | None = None  # For force semaphore change
+    reason: str | None = None
     timestamp: str = field(default_factory=now_iso)
 
     def to_json(self) -> str:
@@ -180,10 +192,11 @@ class MonitoringResponse:
     """
     Response sent from the analytics service (PC2) back to monitoring (PC3).
     """
-    status: str = "OK"               # OK, ERROR, etc.
-    command: str = ""                 # Original command type
-    message: str = ""                # Human-readable message
-    data: Optional[dict] = None      # Query result data
+
+    status: str = "OK"  # OK, ERROR, etc.
+    command: str = ""  # Original command type
+    message: str = ""  # Human-readable message
+    data: dict | None = None  # Query result data
     timestamp: str = field(default_factory=now_iso)
 
     def to_json(self) -> str:
@@ -200,17 +213,19 @@ class MonitoringResponse:
 # Analytics Decision Record (for DB logging)
 # =============================================================================
 
+
 @dataclass
 class AnalyticsDecision:
     """
     Record of a decision made by the analytics service.
     Stored in the database for historical queries.
     """
+
     interseccion: str
-    traffic_state: str               # NORMAL, CONGESTION, GREEN_WAVE
-    decision: str                    # NO_ACTION, EXTEND_GREEN, GREEN_WAVE, FORCE_CHANGE
-    details: str = ""                # Human-readable details
-    sensor_data: Optional[dict] = None  # Snapshot of sensor readings
+    traffic_state: str  # NORMAL, CONGESTION, GREEN_WAVE
+    decision: str  # NO_ACTION, EXTEND_GREEN, GREEN_WAVE, FORCE_CHANGE
+    details: str = ""  # Human-readable details
+    sensor_data: dict | None = None  # Snapshot of sensor readings
     timestamp: str = field(default_factory=now_iso)
 
     def to_json(self) -> str:
@@ -226,16 +241,18 @@ class AnalyticsDecision:
 # Semaphore State Record (for DB / in-memory tracking)
 # =============================================================================
 
+
 @dataclass
 class SemaphoreState:
     """
     Current state of a semaphore at a given intersection.
     """
+
     interseccion: str
-    state_ns: str = "RED"            # North-South direction state
-    state_ew: str = "GREEN"          # East-West direction state
+    state_ns: str = "RED"  # North-South direction state
+    state_ew: str = "GREEN"  # East-West direction state
     last_change: str = field(default_factory=now_iso)
-    cycle_duration_sec: int = 15     # Current cycle duration
+    cycle_duration_sec: int = 15  # Current cycle duration
 
     def to_json(self) -> str:
         return to_json(self)

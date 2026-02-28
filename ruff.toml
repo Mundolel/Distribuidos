@@ -1,0 +1,51 @@
+# Ruff configuration for the distributed traffic management project
+# https://docs.astral.sh/ruff/configuration/
+
+target-version = "py311"
+line-length = 100
+
+[lint]
+# Enable rules
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort (import sorting)
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific rules
+]
+
+# Ignore specific rules that are too strict for this project
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # do not perform function calls in argument defaults (we use field(default_factory=...))
+    "SIM108", # use ternary operator (readability preference)
+    "RUF012", # mutable class attributes (dataclass fields)
+    "N999",   # invalid module name (pc1, pc2, pc3 are fine)
+]
+
+# Exclude generated/cache directories
+exclude = [
+    "__pycache__",
+    ".git",
+    ".venv",
+    "venv",
+    ".ruff_cache",
+    ".pytest_cache",
+]
+
+[lint.per-file-ignores]
+# Tests can use assertions and have longer functions
+"tests/**" = ["B011", "E501"]
+# Init files can have unused imports
+"**/__init__.py" = ["F401"]
+
+[lint.isort]
+known-first-party = ["common", "pc1", "pc2", "pc3"]
+
+[format]
+quote-style = "double"
+indent-style = "space"

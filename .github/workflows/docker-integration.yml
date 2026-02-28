@@ -1,0 +1,72 @@
+name: Docker Integration Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  docker-build-test:
+    name: Build & Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build all Docker images
+        run: docker compose build
+
+      - name: Start the full stack
+        run: docker compose up -d
+
+      - name: Wait for services to initialize
+        run: sleep 10
+
+      - name: Verify all containers are running
+        run: |
+          echo "=== Container Status ==="
+          docker compose ps
+
+          # Check that all 3 containers are running
+          RUNNING=$(docker compose ps --status running -q | wc -l)
+          echo "Running containers: $RUNNING"
+
+          if [ "$RUNNING" -lt 3 ]; then
+            echo "ERROR: Expected 3 running containers, found $RUNNING"
+            echo "=== Container Logs ==="
+            docker compose logs
+            exit 1
+          fi
+
+          echo "All 3 containers are running."
+
+      - name: Check container logs for critical errors
+        run: |
+          echo "=== PC1 (Sensors & Broker) Logs ==="
+          docker compose logs pc1 2>&1 | tail -20
+
+          echo ""
+          echo "=== PC2 (Analytics) Logs ==="
+          docker compose logs pc2 2>&1 | tail -20
+
+          echo ""
+          echo "=== PC3 (Monitoring) Logs ==="
+          docker compose logs pc3 2>&1 | tail -20
+
+          # Fail if any container exited with an error
+          EXITED=$(docker compose ps --status exited -q | wc -l)
+          if [ "$EXITED" -gt 0 ]; then
+            echo ""
+            echo "ERROR: $EXITED container(s) have exited unexpectedly."
+            docker compose ps --status exited
+            docker compose logs
+            exit 1
+          fi
+
+      - name: Tear down the stack
+        if: always()
+        run: docker compose down -v --remove-orphans

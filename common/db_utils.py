@@ -6,10 +6,10 @@ state changes, analytics decisions, and query historical data. Used by
 both the primary DB (PC3) and the replica DB (PC2).
 """
 
-import sqlite3
 import json
 import logging
-from typing import List, Dict, Any, Optional
+import sqlite3
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +95,7 @@ CREATE INDEX IF NOT EXISTS idx_priority_actions_timestamp
 # Database Connection Management
 # =============================================================================
 
+
 class TrafficDB:
     """
     SQLite database wrapper for the traffic management system.
@@ -130,9 +131,9 @@ class TrafficDB:
     # Insert Operations
     # =========================================================================
 
-    def insert_sensor_event(self, sensor_id: str, tipo_sensor: str,
-                            interseccion: str, event_data: dict,
-                            timestamp: str) -> int:
+    def insert_sensor_event(
+        self, sensor_id: str, tipo_sensor: str, interseccion: str, event_data: dict, timestamp: str
+    ) -> int:
         """
         Insert a raw sensor event into the database.
 
@@ -150,16 +151,26 @@ class TrafficDB:
             """INSERT INTO sensor_events
                (sensor_id, tipo_sensor, interseccion, event_data, timestamp)
                VALUES (?, ?, ?, ?, ?)""",
-            (sensor_id, tipo_sensor, interseccion,
-             json.dumps(event_data, ensure_ascii=False), timestamp)
+            (
+                sensor_id,
+                tipo_sensor,
+                interseccion,
+                json.dumps(event_data, ensure_ascii=False),
+                timestamp,
+            ),
         )
         self.conn.commit()
         return cursor.lastrowid
 
-    def insert_semaphore_state(self, interseccion: str, state_ns: str,
-                                state_ew: str, reason: str,
-                                cycle_duration_sec: int,
-                                timestamp: str) -> int:
+    def insert_semaphore_state(
+        self,
+        interseccion: str,
+        state_ns: str,
+        state_ew: str,
+        reason: str,
+        cycle_duration_sec: int,
+        timestamp: str,
+    ) -> int:
         """
         Record a semaphore state change.
 
@@ -170,15 +181,20 @@ class TrafficDB:
             """INSERT INTO semaphore_states
                (interseccion, state_ns, state_ew, reason, cycle_duration_sec, timestamp)
                VALUES (?, ?, ?, ?, ?, ?)""",
-            (interseccion, state_ns, state_ew, reason, cycle_duration_sec, timestamp)
+            (interseccion, state_ns, state_ew, reason, cycle_duration_sec, timestamp),
         )
         self.conn.commit()
         return cursor.lastrowid
 
-    def insert_congestion_record(self, interseccion: str, traffic_state: str,
-                                  decision: str, details: str,
-                                  sensor_data: Optional[dict],
-                                  timestamp: str) -> int:
+    def insert_congestion_record(
+        self,
+        interseccion: str,
+        traffic_state: str,
+        decision: str,
+        details: str,
+        sensor_data: dict | None,
+        timestamp: str,
+    ) -> int:
         """
         Record a congestion detection event and the analytics decision.
 
@@ -190,15 +206,20 @@ class TrafficDB:
             """INSERT INTO congestion_history
                (interseccion, traffic_state, decision, details, sensor_data, timestamp)
                VALUES (?, ?, ?, ?, ?, ?)""",
-            (interseccion, traffic_state, decision, details, sensor_json, timestamp)
+            (interseccion, traffic_state, decision, details, sensor_json, timestamp),
         )
         self.conn.commit()
         return cursor.lastrowid
 
-    def insert_priority_action(self, action_type: str, target: str,
-                                reason: str, requested_by: str,
-                                affected_intersections: List[str],
-                                timestamp: str) -> int:
+    def insert_priority_action(
+        self,
+        action_type: str,
+        target: str,
+        reason: str,
+        requested_by: str,
+        affected_intersections: list[str],
+        timestamp: str,
+    ) -> int:
         """
         Record a priority action (green wave, forced change).
 
@@ -211,7 +232,7 @@ class TrafficDB:
                (action_type, target, reason, requested_by,
                 affected_intersections, timestamp)
                VALUES (?, ?, ?, ?, ?, ?)""",
-            (action_type, target, reason, requested_by, affected_json, timestamp)
+            (action_type, target, reason, requested_by, affected_json, timestamp),
         )
         self.conn.commit()
         return cursor.lastrowid
@@ -220,8 +241,9 @@ class TrafficDB:
     # Query Operations
     # =========================================================================
 
-    def query_events_by_intersection(self, interseccion: str,
-                                      limit: int = 50) -> List[Dict[str, Any]]:
+    def query_events_by_intersection(
+        self, interseccion: str, limit: int = 50
+    ) -> list[dict[str, Any]]:
         """
         Get recent sensor events for a specific intersection.
 
@@ -237,14 +259,17 @@ class TrafficDB:
                WHERE interseccion = ?
                ORDER BY timestamp DESC
                LIMIT ?""",
-            (interseccion, limit)
+            (interseccion, limit),
         )
         return [dict(row) for row in cursor.fetchall()]
 
-    def query_events_by_time_range(self, timestamp_inicio: str,
-                                    timestamp_fin: str,
-                                    interseccion: Optional[str] = None,
-                                    limit: int = 200) -> List[Dict[str, Any]]:
+    def query_events_by_time_range(
+        self,
+        timestamp_inicio: str,
+        timestamp_fin: str,
+        interseccion: str | None = None,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
         """
         Get sensor events within a time range, optionally filtered by intersection.
 
@@ -264,7 +289,7 @@ class TrafficDB:
                    AND interseccion = ?
                    ORDER BY timestamp DESC
                    LIMIT ?""",
-                (timestamp_inicio, timestamp_fin, interseccion, limit)
+                (timestamp_inicio, timestamp_fin, interseccion, limit),
             )
         else:
             cursor = self.conn.execute(
@@ -272,14 +297,17 @@ class TrafficDB:
                    WHERE timestamp >= ? AND timestamp <= ?
                    ORDER BY timestamp DESC
                    LIMIT ?""",
-                (timestamp_inicio, timestamp_fin, limit)
+                (timestamp_inicio, timestamp_fin, limit),
             )
         return [dict(row) for row in cursor.fetchall()]
 
-    def query_congestion_history(self, timestamp_inicio: Optional[str] = None,
-                                  timestamp_fin: Optional[str] = None,
-                                  interseccion: Optional[str] = None,
-                                  limit: int = 100) -> List[Dict[str, Any]]:
+    def query_congestion_history(
+        self,
+        timestamp_inicio: str | None = None,
+        timestamp_fin: str | None = None,
+        interseccion: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
         """
         Query congestion history with optional filters.
 
@@ -305,7 +333,7 @@ class TrafficDB:
         cursor = self.conn.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
 
-    def query_semaphore_state(self, interseccion: str) -> Optional[Dict[str, Any]]:
+    def query_semaphore_state(self, interseccion: str) -> dict[str, Any] | None:
         """
         Get the most recent semaphore state for an intersection.
 
@@ -317,12 +345,12 @@ class TrafficDB:
                WHERE interseccion = ?
                ORDER BY timestamp DESC
                LIMIT 1""",
-            (interseccion,)
+            (interseccion,),
         )
         row = cursor.fetchone()
         return dict(row) if row else None
 
-    def query_all_semaphore_states(self) -> List[Dict[str, Any]]:
+    def query_all_semaphore_states(self) -> list[dict[str, Any]]:
         """
         Get the latest state of every semaphore (one per intersection).
 
@@ -341,7 +369,7 @@ class TrafficDB:
         )
         return [dict(row) for row in cursor.fetchall()]
 
-    def query_priority_actions(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def query_priority_actions(self, limit: int = 50) -> list[dict[str, Any]]:
         """
         Get recent priority actions (green waves, forced changes).
 
@@ -352,12 +380,11 @@ class TrafficDB:
             """SELECT * FROM priority_actions
                ORDER BY timestamp DESC
                LIMIT ?""",
-            (limit,)
+            (limit,),
         )
         return [dict(row) for row in cursor.fetchall()]
 
-    def get_event_count_in_interval(self, timestamp_inicio: str,
-                                     timestamp_fin: str) -> int:
+    def get_event_count_in_interval(self, timestamp_inicio: str, timestamp_fin: str) -> int:
         """
         Count the number of sensor events stored in a time interval.
         Used for performance metrics (throughput measurement).
@@ -368,21 +395,21 @@ class TrafficDB:
         cursor = self.conn.execute(
             """SELECT COUNT(*) as cnt FROM sensor_events
                WHERE timestamp >= ? AND timestamp <= ?""",
-            (timestamp_inicio, timestamp_fin)
+            (timestamp_inicio, timestamp_fin),
         )
         row = cursor.fetchone()
         return row["cnt"] if row else 0
 
-    def get_system_summary(self) -> Dict[str, Any]:
+    def get_system_summary(self) -> dict[str, Any]:
         """
         Get a summary of the system state for monitoring display.
 
         Returns:
             Dictionary with counts and recent activity.
         """
-        total_events = self.conn.execute(
-            "SELECT COUNT(*) as cnt FROM sensor_events"
-        ).fetchone()["cnt"]
+        total_events = self.conn.execute("SELECT COUNT(*) as cnt FROM sensor_events").fetchone()[
+            "cnt"
+        ]
 
         total_congestion = self.conn.execute(
             "SELECT COUNT(*) as cnt FROM congestion_history WHERE traffic_state = 'CONGESTION'"

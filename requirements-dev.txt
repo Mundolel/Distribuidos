@@ -1,0 +1,4 @@
+# Development dependencies (not needed at runtime in Docker containers)
+-r requirements.txt
+ruff>=0.4.0
+pytest>=7.4.0

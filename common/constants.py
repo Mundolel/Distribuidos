@@ -24,10 +24,10 @@ SENSOR_TYPE_GPS = "gps"
 # =============================================================================
 # Congestion Level Thresholds (based on average speed - km/h)
 # =============================================================================
-CONGESTION_ALTA_MAX_SPEED = 10       # velocidad_promedio < 10 -> ALTA
-CONGESTION_NORMAL_MIN_SPEED = 11     # 11 <= velocidad_promedio <= 39 -> NORMAL
+CONGESTION_ALTA_MAX_SPEED = 10  # velocidad_promedio < 10 -> ALTA
+CONGESTION_NORMAL_MIN_SPEED = 11  # 11 <= velocidad_promedio <= 39 -> NORMAL
 CONGESTION_NORMAL_MAX_SPEED = 39
-CONGESTION_BAJA_MIN_SPEED = 40       # velocidad_promedio > 40 -> BAJA
+CONGESTION_BAJA_MIN_SPEED = 40  # velocidad_promedio > 40 -> BAJA
 
 # =============================================================================
 # Congestion Level Labels
@@ -47,14 +47,14 @@ TRAFFIC_GREEN_WAVE = "GREEN_WAVE"
 # Traffic Rule Thresholds (default values, also defined in config)
 # =============================================================================
 # Normal traffic: Q < Q_MAX and Vp > VP_MIN and D < D_MAX
-RULE_NORMAL_Q_MAX = 5          # Max queue length for normal traffic
-RULE_NORMAL_VP_MIN = 35        # Min average speed for normal traffic (km/h)
-RULE_NORMAL_D_MAX = 20         # Max density for normal traffic (veh/km)
+RULE_NORMAL_Q_MAX = 5  # Max queue length for normal traffic
+RULE_NORMAL_VP_MIN = 35  # Min average speed for normal traffic (km/h)
+RULE_NORMAL_D_MAX = 20  # Max density for normal traffic (veh/km)
 
 # Congestion: Q >= Q_MIN or Vp <= VP_MAX or D >= D_MIN
-RULE_CONGESTION_Q_MIN = 10     # Min queue length to trigger congestion
-RULE_CONGESTION_VP_MAX = 20    # Max average speed to trigger congestion (km/h)
-RULE_CONGESTION_D_MIN = 40     # Min density to trigger congestion (veh/km)
+RULE_CONGESTION_Q_MIN = 10  # Min queue length to trigger congestion
+RULE_CONGESTION_VP_MAX = 20  # Max average speed to trigger congestion (km/h)
+RULE_CONGESTION_D_MIN = 40  # Min density to trigger congestion (veh/km)
 
 # =============================================================================
 # Semaphore States
@@ -65,9 +65,9 @@ SEMAPHORE_RED = "RED"
 # =============================================================================
 # Semaphore Timing (seconds)
 # =============================================================================
-NORMAL_CYCLE_SEC = 15           # Normal red-to-green wait time
-CONGESTION_EXTENSION_SEC = 10   # Extra green time during congestion
-GREEN_WAVE_DURATION_SEC = 30    # How long green wave lasts
+NORMAL_CYCLE_SEC = 15  # Normal red-to-green wait time
+CONGESTION_EXTENSION_SEC = 10  # Extra green time during congestion
+GREEN_WAVE_DURATION_SEC = 30  # How long green wave lasts
 
 # =============================================================================
 # Sensor Generation Defaults

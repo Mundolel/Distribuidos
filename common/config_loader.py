@@ -7,14 +7,11 @@ grid layout, sensor mappings, ZMQ ports, traffic rules, and timings.
 
 import json
 import os
-from typing import List, Dict, Any, Optional
-
+from typing import Any
 
 # Default config path (relative to project root)
 DEFAULT_CONFIG_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "config",
-    "city_config.json"
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config", "city_config.json"
 )
 
 
@@ -25,7 +22,7 @@ class CityConfig:
 
     def __init__(self, config_path: str = DEFAULT_CONFIG_PATH):
         """Load configuration from JSON file."""
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(config_path, encoding="utf-8") as f:
             self._config = json.load(f)
 
     # =========================================================================
@@ -33,17 +30,17 @@ class CityConfig:
     # =========================================================================
 
     @property
-    def rows(self) -> List[str]:
+    def rows(self) -> list[str]:
         """Grid row labels (e.g., ['A', 'B', 'C', 'D'])."""
         return self._config["city"]["grid"]["rows"]
 
     @property
-    def columns(self) -> List[int]:
+    def columns(self) -> list[int]:
         """Grid column numbers (e.g., [1, 2, 3, 4])."""
         return self._config["city"]["grid"]["columns"]
 
     @property
-    def intersections(self) -> List[str]:
+    def intersections(self) -> list[str]:
         """All intersection IDs (e.g., ['INT-A1', ..., 'INT-D4'])."""
         return self._config["intersections"]
 
@@ -52,37 +49,34 @@ class CityConfig:
     # =========================================================================
 
     @property
-    def cameras(self) -> List[Dict[str, str]]:
+    def cameras(self) -> list[dict[str, str]]:
         """Camera sensor definitions."""
         return self._config["sensors"]["cameras"]
 
     @property
-    def inductive_loops(self) -> List[Dict[str, str]]:
+    def inductive_loops(self) -> list[dict[str, str]]:
         """Inductive loop sensor definitions."""
         return self._config["sensors"]["inductive_loops"]
 
     @property
-    def gps_sensors(self) -> List[Dict[str, str]]:
+    def gps_sensors(self) -> list[dict[str, str]]:
         """GPS sensor definitions."""
         return self._config["sensors"]["gps"]
 
-    def get_all_sensors(self) -> List[Dict[str, str]]:
+    def get_all_sensors(self) -> list[dict[str, str]]:
         """Return all sensors across all types."""
         return self.cameras + self.inductive_loops + self.gps_sensors
 
-    def get_sensors_at_intersection(self, intersection: str) -> List[Dict[str, str]]:
+    def get_sensors_at_intersection(self, intersection: str) -> list[dict[str, str]]:
         """Get all sensors located at a given intersection."""
-        return [
-            s for s in self.get_all_sensors()
-            if s["interseccion"] == intersection
-        ]
+        return [s for s in self.get_all_sensors() if s["interseccion"] == intersection]
 
     # =========================================================================
     # Semaphores
     # =========================================================================
 
     @property
-    def semaphores(self) -> List[str]:
+    def semaphores(self) -> list[str]:
         """All semaphore IDs."""
         return self._config["semaphores"]["list"]
 
@@ -96,17 +90,17 @@ class CityConfig:
     # =========================================================================
 
     @property
-    def rules(self) -> Dict[str, Any]:
+    def rules(self) -> dict[str, Any]:
         """Full rules configuration."""
         return self._config["rules"]
 
     @property
-    def normal_rule(self) -> Dict[str, Any]:
+    def normal_rule(self) -> dict[str, Any]:
         """Normal traffic conditions."""
         return self._config["rules"]["normal"]["conditions"]
 
     @property
-    def congestion_rule(self) -> Dict[str, Any]:
+    def congestion_rule(self) -> dict[str, Any]:
         """Congestion detection conditions."""
         return self._config["rules"]["congestion"]["conditions"]
 
@@ -115,7 +109,7 @@ class CityConfig:
     # =========================================================================
 
     @property
-    def timings(self) -> Dict[str, int]:
+    def timings(self) -> dict[str, int]:
         """All timing parameters."""
         return self._config["timings"]
 
@@ -156,7 +150,7 @@ class CityConfig:
     # =========================================================================
 
     @property
-    def zmq_ports(self) -> Dict[str, int]:
+    def zmq_ports(self) -> dict[str, int]:
         """All ZMQ port assignments."""
         return self._config["zmq_ports"]
 
@@ -169,7 +163,7 @@ class CityConfig:
     # =========================================================================
 
     @property
-    def zmq_topics(self) -> Dict[str, str]:
+    def zmq_topics(self) -> dict[str, str]:
         """ZMQ topic strings for PUB/SUB."""
         return self._config["zmq_topics"]
 
@@ -205,7 +199,7 @@ class CityConfig:
 
 
 # Singleton-like convenience: load once and reuse
-_config_instance: Optional[CityConfig] = None
+_config_instance: CityConfig | None = None
 
 
 def get_config(config_path: str = DEFAULT_CONFIG_PATH) -> CityConfig:
