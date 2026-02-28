@@ -1,0 +1,125 @@
+{
+  "city": {
+    "name": "Ciudad Simulada",
+    "grid": {
+      "rows": ["A", "B", "C", "D"],
+      "columns": [1, 2, 3, 4]
+    },
+    "description": "4x4 grid city with 16 intersections. All roads are one-way."
+  },
+
+  "intersections": [
+    "INT-A1", "INT-A2", "INT-A3", "INT-A4",
+    "INT-B1", "INT-B2", "INT-B3", "INT-B4",
+    "INT-C1", "INT-C2", "INT-C3", "INT-C4",
+    "INT-D1", "INT-D2", "INT-D3", "INT-D4"
+  ],
+
+  "sensors": {
+    "cameras": [
+      {"sensor_id": "CAM-A1", "interseccion": "INT-A1"},
+      {"sensor_id": "CAM-A3", "interseccion": "INT-A3"},
+      {"sensor_id": "CAM-B2", "interseccion": "INT-B2"},
+      {"sensor_id": "CAM-B4", "interseccion": "INT-B4"},
+      {"sensor_id": "CAM-C1", "interseccion": "INT-C1"},
+      {"sensor_id": "CAM-C3", "interseccion": "INT-C3"},
+      {"sensor_id": "CAM-D2", "interseccion": "INT-D2"},
+      {"sensor_id": "CAM-D4", "interseccion": "INT-D4"}
+    ],
+    "inductive_loops": [
+      {"sensor_id": "ESP-A2", "interseccion": "INT-A2"},
+      {"sensor_id": "ESP-A4", "interseccion": "INT-A4"},
+      {"sensor_id": "ESP-B1", "interseccion": "INT-B1"},
+      {"sensor_id": "ESP-B3", "interseccion": "INT-B3"},
+      {"sensor_id": "ESP-C2", "interseccion": "INT-C2"},
+      {"sensor_id": "ESP-C4", "interseccion": "INT-C4"},
+      {"sensor_id": "ESP-D1", "interseccion": "INT-D1"},
+      {"sensor_id": "ESP-D3", "interseccion": "INT-D3"}
+    ],
+    "gps": [
+      {"sensor_id": "GPS-A1", "interseccion": "INT-A1"},
+      {"sensor_id": "GPS-A4", "interseccion": "INT-A4"},
+      {"sensor_id": "GPS-B2", "interseccion": "INT-B2"},
+      {"sensor_id": "GPS-B3", "interseccion": "INT-B3"},
+      {"sensor_id": "GPS-C1", "interseccion": "INT-C1"},
+      {"sensor_id": "GPS-C4", "interseccion": "INT-C4"},
+      {"sensor_id": "GPS-D2", "interseccion": "INT-D2"},
+      {"sensor_id": "GPS-D3", "interseccion": "INT-D3"}
+    ]
+  },
+
+  "semaphores": {
+    "description": "Every intersection has a semaphore. Initial state is RED. Two directions: NS (north-south) and EW (east-west). When NS is GREEN, EW is RED and vice versa.",
+    "initial_state": "RED",
+    "list": [
+      "SEM-A1", "SEM-A2", "SEM-A3", "SEM-A4",
+      "SEM-B1", "SEM-B2", "SEM-B3", "SEM-B4",
+      "SEM-C1", "SEM-C2", "SEM-C3", "SEM-C4",
+      "SEM-D1", "SEM-D2", "SEM-D3", "SEM-D4"
+    ]
+  },
+
+  "rules": {
+    "normal": {
+      "description": "Traffic is flowing normally",
+      "conditions": {
+        "Q_max": 5,
+        "Vp_min": 35,
+        "D_max": 20
+      },
+      "action": "Standard 15s red/green cycle"
+    },
+    "congestion": {
+      "description": "Congestion detected at intersection",
+      "conditions": {
+        "Q_min": 10,
+        "Vp_max": 20,
+        "D_min": 40
+      },
+      "action": "Extend green phase by 10s on congested direction"
+    },
+    "green_wave": {
+      "description": "Priority route - force green on all semaphores along a path",
+      "conditions": {
+        "trigger": "user_command",
+        "reason": "ambulance, emergency, or manual override"
+      },
+      "action": "Force GREEN on all semaphores along specified row/column for 30s"
+    }
+  },
+
+  "timings": {
+    "normal_cycle_sec": 15,
+    "congestion_extension_sec": 10,
+    "green_wave_duration_sec": 30,
+    "sensor_default_interval_sec": 10,
+    "inductive_interval_sec": 30,
+    "health_check_interval_sec": 5,
+    "health_check_timeout_ms": 2000,
+    "health_check_max_retries": 3
+  },
+
+  "zmq_ports": {
+    "sensor_camera_pub": 5555,
+    "sensor_inductive_pub": 5556,
+    "sensor_gps_pub": 5557,
+    "broker_pub": 5560,
+    "analytics_rep": 5561,
+    "semaphore_control_pull": 5562,
+    "db_primary_pull": 5563,
+    "db_replica_pull": 5564,
+    "health_check_rep": 5565
+  },
+
+  "zmq_topics": {
+    "camera": "camara",
+    "inductive": "espira",
+    "gps": "gps"
+  },
+
+  "network": {
+    "pc1_host": "pc1",
+    "pc2_host": "pc2",
+    "pc3_host": "pc3"
+  }
+}

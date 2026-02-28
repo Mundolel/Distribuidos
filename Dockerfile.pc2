@@ -1,0 +1,22 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy common modules and PC2 code
+COPY common/ ./common/
+COPY config/ ./config/
+COPY pc2/ ./pc2/
+
+# Create data directory for replica DB
+RUN mkdir -p /data
+
+# Set Python path so imports work
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+# Entrypoint launches all PC2 processes (analytics, semaphore control, db replica)
+CMD ["python", "pc2/start_pc2.py"]

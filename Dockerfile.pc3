@@ -1,0 +1,22 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy common modules and PC3 code
+COPY common/ ./common/
+COPY config/ ./config/
+COPY pc3/ ./pc3/
+
+# Create data directory for primary DB
+RUN mkdir -p /data
+
+# Set Python path so imports work
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+# Entrypoint launches all PC3 processes (primary DB, monitoring service)
+CMD ["python", "pc3/start_pc3.py"]

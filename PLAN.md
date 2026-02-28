@@ -55,18 +55,18 @@ distribuidos/
 
 ## Step-by-Step Development Plan
 
-### PHASE 1: Foundation & Configuration (Days 1-2)
+### PHASE 1: Foundation & Configuration (Days 1-2) ✅ COMPLETED
 
 #### Step 1.1 - Project scaffolding
-- [ ] Create the directory structure above
-- [ ] Create `requirements.txt` with: `pyzmq`, `pyyaml`, `pytest`
-- [ ] Create base Dockerfiles for each PC
+- [x] Create the directory structure above
+- [x] Create `requirements.txt` with: `pyzmq`, `pyyaml`, `pytest`
+- [x] Create base Dockerfiles for each PC
 
 #### Step 1.2 - Configuration system (`config/city_config.json`)
-- [ ] Define the 4x4 grid (rows A-D, columns 1-4)
-- [ ] Map which intersections have which sensors
-- [ ] Define ZMQ ports and addresses
-- [ ] Define traffic rules and thresholds
+- [x] Define the 4x4 grid (rows A-D, columns 1-4)
+- [x] Map which intersections have which sensors
+- [x] Define ZMQ ports and addresses
+- [x] Define traffic rules and thresholds
 
 Example config:
 ```json
@@ -100,12 +100,15 @@ Example config:
 ```
 
 #### Step 1.3 - Common models (`common/models.py`)
-- [ ] Define data classes for: `CameraEvent`, `InductiveEvent`, `GPSEvent`, `SemaphoreCommand`, `MonitoringQuery`, `MonitoringResponse`
-- [ ] JSON serialization/deserialization helpers
+- [x] Define data classes for: `CameraEvent`, `InductiveEvent`, `GPSEvent`, `SemaphoreCommand`, `MonitoringQuery`, `MonitoringResponse`
+- [x] JSON serialization/deserialization helpers
+- [x] Config loader utility (`common/config_loader.py`)
 
 #### Step 1.4 - Database schema (`common/db_utils.py`)
-- [ ] Create tables: `sensor_events`, `semaphore_states`, `congestion_history`, `priority_actions`
-- [ ] Helper functions: `insert_event()`, `query_by_time_range()`, `query_by_intersection()`, `get_semaphore_state()`
+- [x] Create tables: `sensor_events`, `semaphore_states`, `congestion_history`, `priority_actions`
+- [x] Helper functions: `insert_event()`, `query_by_time_range()`, `query_by_intersection()`, `get_semaphore_state()`
+- [x] Performance metric helper: `get_event_count_in_interval()`
+- [x] System summary: `get_system_summary()`
 
 ---
 

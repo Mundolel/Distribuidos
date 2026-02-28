@@ -1,0 +1,45 @@
+version: "3.8"
+
+services:
+  pc1:
+    build:
+      context: .
+      dockerfile: Dockerfile.pc1
+    container_name: pc1-sensors-broker
+    networks:
+      - traffic-net
+    depends_on:
+      - pc2
+    restart: unless-stopped
+
+  pc2:
+    build:
+      context: .
+      dockerfile: Dockerfile.pc2
+    container_name: pc2-analytics
+    networks:
+      - traffic-net
+    volumes:
+      - pc2-data:/data
+    restart: unless-stopped
+
+  pc3:
+    build:
+      context: .
+      dockerfile: Dockerfile.pc3
+    container_name: pc3-monitoring
+    networks:
+      - traffic-net
+    volumes:
+      - pc3-data:/data
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+
+networks:
+  traffic-net:
+    driver: bridge
+
+volumes:
+  pc2-data:
+  pc3-data:
