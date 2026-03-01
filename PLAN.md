@@ -112,14 +112,14 @@ Example config:
 
 ---
 
-### PHASE 2: PC1 - Sensors & Broker (Days 3-5)
+### PHASE 2: PC1 - Sensors & Broker (Days 3-5) ✅ COMPLETED
 
 #### Step 2.1 - Sensor simulators
-Each sensor is a separate process using ZMQ `PUB` socket:
+Each sensor type runs as a single process handling all sensors of that type via a shared ZMQ `PUB` socket:
 
-- [ ] **Camera sensor** (`camera_sensor.py`): Publishes on topic `"camara"`. Generates random `volumen` (0-20 vehicles) and `velocidad_promedio` (5-50 km/h) at configured intervals.
-- [ ] **Inductive loop sensor** (`inductive_sensor.py`): Publishes on topic `"espira"`. Generates random `vehiculos_contados` (0-30) every 30 seconds.
-- [ ] **GPS sensor** (`gps_sensor.py`): Publishes on topic `"gps"`. Generates random `velocidad_promedio` and derives `nivel_congestion` (ALTA < 10, NORMAL 11-39, BAJA > 40).
+- [x] **Camera sensor** (`camera_sensor.py`): Publishes on topic `"camara"`. Generates random `volumen` (0-20 vehicles) and `velocidad_promedio` (5-50 km/h) at configured intervals.
+- [x] **Inductive loop sensor** (`inductive_sensor.py`): Publishes on topic `"espira"`. Generates random `vehiculos_contados` (0-30) every 30 seconds.
+- [x] **GPS sensor** (`gps_sensor.py`): Publishes on topic `"gps"`. Generates random `velocidad_promedio` and derives `nivel_congestion` (ALTA < 10, NORMAL 11-39, BAJA > 40).
 
 All sensors:
 - Accept CLI params or read config for: intersection ID, generation interval
@@ -169,14 +169,21 @@ Congestion level rules for GPS:
 - BAJA: velocidad_promedio > 40
 
 #### Step 2.2 - ZMQ Broker (`broker.py`)
-- [ ] **SUB** socket subscribing to topics: `"camara"`, `"espira"`, `"gps"` (from local sensors)
-- [ ] **PUB** socket forwarding all received events to PC2
-- [ ] Acts as XSUB/XPUB proxy (or manual forward loop)
-- [ ] Print forwarded messages to stdout
+- [x] **SUB** socket subscribing to topics: `"camara"`, `"espira"`, `"gps"` (from local sensors)
+- [x] **PUB** socket forwarding all received events to PC2
+- [x] Uses zmq.Poller for efficient multi-socket polling
+- [x] Print forwarded messages to stdout
 
-#### Step 2.3 - Multithreaded broker variant (for performance comparison)
-- [ ] Same broker but using `threading` to handle each topic subscription in a separate thread
-- [ ] This is needed for the performance experiments in the final delivery
+#### Step 2.3 - Multithreaded broker variant (`broker_threaded.py`)
+- [x] Same broker but using `threading` to handle each topic subscription in a separate thread
+- [x] Uses inproc PUSH/PULL pattern to safely share messages between threads
+- [x] This is needed for the performance experiments in the final delivery
+
+#### Step 2.4 - PC1 Launcher (`start_pc1.py`)
+- [x] Entrypoint script that launches broker + all sensor processes as subprocesses
+- [x] Supports `--broker-mode standard|threaded` and `--interval` override
+- [x] Graceful shutdown: terminates all children on SIGINT/SIGTERM
+- [x] Environment variable support: `BROKER_MODE`, `SENSOR_INTERVAL`
 
 ---
 
