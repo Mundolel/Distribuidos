@@ -1,20 +1,22 @@
 """
-camera_sensor.py - Camera sensor simulator for traffic monitoring.
+gps_sensor.py - GPS sensor simulator for traffic monitoring.
 
-Generates EVENTO_LONGITUD_COLA (Lq) events: queue length and average speed
-at an intersection. Publishes events via ZMQ PUB socket on topic "camara".
+Generates EVENTO_DENSIDAD_DE_TRAFICO (Dt) events: average speed and
+congestion level derived from it. Publishes events via ZMQ PUB socket
+on topic "gps".
+
+Congestion levels (auto-calculated by GPSEvent):
+    - ALTA: velocidad_promedio < 10 km/h
+    - NORMAL: 11 <= velocidad_promedio <= 39 km/h
+    - BAJA: velocidad_promedio > 40 km/h
 
 Supports two modes:
   - Single-sensor: one sensor_id + intersection via CLI args
-  - Multi-sensor: reads all cameras from config, cycles through them on
-    a single PUB socket (used by start_pc1.py)
+  - Multi-sensor: reads all GPS sensors from config, cycles through them
 
 Usage:
-    # Single sensor:
-    python -m pc1.sensors.camera_sensor --sensor-id CAM-A1 --intersection INT-A1
-
-    # All sensors from config:
-    python -m pc1.sensors.camera_sensor --all
+    python -m pc1.sensors.gps_sensor --sensor-id GPS-A1 --intersection INT-A1
+    python -m pc1.sensors.gps_sensor --all
 """
 
 import argparse
@@ -27,14 +29,12 @@ import zmq
 
 from common.config_loader import get_config
 from common.constants import (
-    CAMERA_SPEED_MAX,
-    CAMERA_SPEED_MIN,
-    CAMERA_VOLUME_MAX,
-    CAMERA_VOLUME_MIN,
+    GPS_SPEED_MAX,
+    GPS_SPEED_MIN,
     SENSOR_DEFAULT_INTERVAL_SEC,
-    TOPIC_CAMERA,
+    TOPIC_GPS,
 )
-from common.models import CameraEvent
+from common.models import GPSEvent
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -44,7 +44,7 @@ logging.basicConfig(
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     datefmt="%Y-%m-%dT%H:%M:%SZ",
 )
-logger = logging.getLogger("CameraSensor")
+logger = logging.getLogger("GPSSensor")
 
 # ---------------------------------------------------------------------------
 # Graceful shutdown
@@ -67,30 +67,29 @@ signal.signal(signal.SIGTERM, _signal_handler)
 # ---------------------------------------------------------------------------
 
 
-def generate_camera_event(sensor_id: str, intersection: str) -> CameraEvent:
-    """Generate a random camera event simulating queue length and speed."""
-    volumen = random.randint(CAMERA_VOLUME_MIN, CAMERA_VOLUME_MAX)
-    velocidad = round(random.uniform(CAMERA_SPEED_MIN, CAMERA_SPEED_MAX), 1)
-    return CameraEvent(
+def generate_gps_event(sensor_id: str, intersection: str) -> GPSEvent:
+    """
+    Generate a random GPS event simulating traffic density.
+
+    The congestion level is automatically derived from velocidad_promedio
+    by the GPSEvent.__post_init__ method.
+    """
+    velocidad = round(random.uniform(GPS_SPEED_MIN, GPS_SPEED_MAX), 1)
+    return GPSEvent(
         sensor_id=sensor_id,
         interseccion=intersection,
-        volumen=volumen,
         velocidad_promedio=velocidad,
     )
 
 
-def run_camera_sensor(
+def run_gps_sensor(
     sensors: list[dict[str, str]],
     interval_sec: float,
     pub_port: int,
 ) -> None:
     """
-    Main loop: generate camera events for one or more sensors and publish
+    Main loop: generate GPS events for one or more sensors and publish
     them over a single ZMQ PUB socket.
-
-    In each cycle, one event is generated per sensor. The delay between
-    individual sensor events within a cycle is interval / len(sensors)
-    to spread them evenly.
 
     Args:
         sensors: List of sensor dicts with 'sensor_id' and 'interseccion'.
@@ -104,7 +103,7 @@ def run_camera_sensor(
 
     sensor_ids = [s["sensor_id"] for s in sensors]
     logger.info(
-        "Camera sensor process started | sensors=%s | interval=%ss | PUB on %s",
+        "GPS sensor process started | sensors=%s | interval=%ss | PUB on %s",
         sensor_ids,
         interval_sec,
         bind_addr,
@@ -121,21 +120,21 @@ def run_camera_sensor(
             for sensor_def in sensors:
                 if not _running:
                     break
-                event = generate_camera_event(sensor_def["sensor_id"], sensor_def["interseccion"])
-                message = f"{TOPIC_CAMERA} {event.to_json()}"
+                event = generate_gps_event(sensor_def["sensor_id"], sensor_def["interseccion"])
+                message = f"{TOPIC_GPS} {event.to_json()}"
                 publisher.send_string(message)
                 logger.info(
-                    "[%s @ %s] volumen=%d, velocidad=%.1f km/h",
+                    "[%s @ %s] velocidad=%.1f km/h, congestion=%s",
                     event.sensor_id,
                     event.interseccion,
-                    event.volumen,
                     event.velocidad_promedio,
+                    event.nivel_congestion,
                 )
                 time.sleep(per_sensor_delay)
     except KeyboardInterrupt:
-        logger.info("Camera sensor process interrupted.")
+        logger.info("GPS sensor process interrupted.")
     finally:
-        logger.info("Camera sensor process shutting down.")
+        logger.info("GPS sensor process shutting down.")
         publisher.close()
         context.term()
 
@@ -146,13 +145,13 @@ def run_camera_sensor(
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Camera sensor simulator")
-    parser.add_argument("--sensor-id", help="Sensor identifier (e.g. CAM-A1)")
+    parser = argparse.ArgumentParser(description="GPS sensor simulator")
+    parser.add_argument("--sensor-id", help="Sensor identifier (e.g. GPS-A1)")
     parser.add_argument("--intersection", help="Intersection ID (e.g. INT-A1)")
     parser.add_argument(
         "--all",
         action="store_true",
-        help="Run all camera sensors from config",
+        help="Run all GPS sensors from config",
     )
     parser.add_argument(
         "--interval",
@@ -172,17 +171,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     config = get_config()
-    pub_port = args.port if args.port else config.get_port("sensor_camera_pub")
+    pub_port = args.port if args.port else config.get_port("sensor_gps_pub")
 
     if args.all:
-        sensors = config.cameras
+        sensors = config.gps_sensors
     elif args.sensor_id and args.intersection:
         sensors = [{"sensor_id": args.sensor_id, "interseccion": args.intersection}]
     else:
         logger.error("Provide either --all or both --sensor-id and --intersection")
         return
 
-    run_camera_sensor(
+    run_gps_sensor(
         sensors=sensors,
         interval_sec=args.interval,
         pub_port=pub_port,

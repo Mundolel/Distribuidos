@@ -32,7 +32,7 @@ from common.constants import (
     INDUCTIVE_INTERVAL_SEC,
     TOPIC_INDUCTIVE,
 )
-from common.models import InductiveEvent, now_iso
+from common.models import InductiveEvent
 
 # ---------------------------------------------------------------------------
 # Logging
