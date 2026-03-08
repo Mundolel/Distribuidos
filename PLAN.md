@@ -187,15 +187,15 @@ Congestion level rules for GPS:
 
 ---
 
-### PHASE 3: PC2 - Analytics & Semaphore Control (Days 5-8)
+### PHASE 3: PC2 - Analytics & Semaphore Control (Days 5-8) ✅ COMPLETED
 
 #### Step 3.1 - Analytics service (`analytics_service.py`)
 This is the core brain of the system. Multiple ZMQ sockets:
 
-- [ ] **SUB** socket: Subscribes to broker's PUB (receives all sensor events)
-- [ ] **PUSH** socket (x2): Sends data to primary DB (PC3) and replica DB (PC2)
-- [ ] **PUB/PUSH** to semaphore control: Sends light-change commands
-- [ ] **REP** socket: Responds to monitoring queries from PC3 (REQ/REP)
+- [x] **SUB** socket: Subscribes to broker's PUB (receives all sensor events)
+- [x] **PUSH** socket (x2): Sends data to primary DB (PC3) and replica DB (PC2)
+- [x] **PUB/PUSH** to semaphore control: Sends light-change commands
+- [x] **REP** socket: Responds to monitoring queries from PC3 (REQ/REP)
 
 Logic:
 1. Receive sensor event
@@ -208,28 +208,29 @@ Logic:
 5. Print all decisions and actions to stdout
 
 #### Step 3.2 - Semaphore control service (`traffic_light_control.py`)
-- [ ] Maintains in-memory state of all semaphores (intersection -> color)
-- [ ] **PULL** or **SUB** socket: Receives commands from analytics
-- [ ] Executes light changes: red->green, green->red
-- [ ] Prints every state change: `"[INT-B3] RED -> GREEN (reason: congestion detected)"`
+- [x] Maintains in-memory state of all semaphores (intersection -> color)
+- [x] **PULL** or **SUB** socket: Receives commands from analytics
+- [x] Executes light changes: red->green, green->red
+- [x] Prints every state change: `"[INT-B3] RED -> GREEN (reason: congestion detected)"`
 
 #### Step 3.3 - DB Replica worker (`db_replica.py`)
-- [ ] **PULL** socket: Receives data from analytics service
-- [ ] Inserts into local SQLite replica database
-- [ ] This replica activates as primary if PC3 fails
+- [x] **PULL** socket: Receives data from analytics service
+- [x] Inserts into local SQLite replica database
+- [x] This replica activates as primary if PC3 fails
 
 ---
 
-### PHASE 4: PC3 - Primary DB & Monitoring (Days 8-10)
+### PHASE 4: PC3 - Primary DB & Monitoring (Days 8-10) ✅ COMPLETED
 
 #### Step 4.1 - Primary DB worker (`db_primary.py`)
-- [ ] **PULL** socket: Receives data from analytics service (PC2)
-- [ ] Inserts into primary SQLite database
-- [ ] Prints operations to stdout
+- [x] **PULL** socket: Receives data from analytics service (PC2)
+- [x] Inserts into primary SQLite database
+- [x] Prints operations to stdout
+- [x] Health check REP daemon thread (port 5565) for Phase 5
 
 #### Step 4.2 - Monitoring & query service (`monitoring_service.py`)
-- [ ] Interactive CLI for the user
-- [ ] **REQ** socket to analytics service (PC2) for queries and commands
+- [x] Interactive CLI for the user
+- [x] **REQ** socket to analytics service (PC2) for queries and commands
 
 **Supported operations:**
 1. Estado actual de una interseccion (e.g., INT-B3)
@@ -237,9 +238,14 @@ Logic:
 3. Forzar ola verde en una via (ambulancia)
 4. Cambiar semaforo de una interseccion especifica
 5. Estado general del sistema
+6. Health check
 
-- [ ] Also uses **REQ** to query database for historical data
-- [ ] Prints all operations and responses
+- [x] Prints all operations and responses
+
+#### Step 4.3 - PC3 Launcher (`start_pc3.py`)
+- [x] Launches db_primary as background subprocess
+- [x] Runs monitoring_service in foreground for interactive stdin access
+- [x] Graceful shutdown of background process
 
 ---
 
