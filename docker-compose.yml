@@ -32,6 +32,8 @@ services:
       - traffic-net
     volumes:
       - pc3-data:/data
+    depends_on:
+      - pc2
     stdin_open: true
     tty: true
     restart: unless-stopped
