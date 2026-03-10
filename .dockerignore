@@ -1,0 +1,34 @@
+# Git
+.git
+.gitignore
+
+# CI/CD
+.github
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+
+# Tests (not needed in containers)
+tests/
+
+# Dev files
+requirements-dev.txt
+ruff.toml
+
+# Documentation
+*.md
+*.pdf
+
+# Docker (avoid recursive context)
+.dockerignore

@@ -1,0 +1,19 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy common modules and PC1 code
+COPY common/ ./common/
+COPY config/ ./config/
+COPY pc1/ ./pc1/
+
+# Set Python path so imports work
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+# Entrypoint launches all PC1 processes (broker + sensors)
+CMD ["python", "pc1/start_pc1.py"]
