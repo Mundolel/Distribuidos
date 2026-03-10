@@ -87,9 +87,9 @@ The analytics service evaluates sensor data against these rules to determine the
 | **Green Wave** | User command (e.g., ambulance) | Force all semaphores on a route to GREEN | 30s forced green |
 
 **Variables:**
-- **Q** -- Queue length: number of vehicles waiting (from camera sensor)
-- **Vp** -- Average speed in km/h (from camera and GPS sensors)
-- **D** -- Traffic density in vehicles/km (derived from GPS sensor)
+- **Q** -- Queue length: number of vehicles waiting (from camera sensor `volumen`)
+- **Vp** -- Average speed in km/h (from camera and GPS sensors `velocidad_promedio`)
+- **D** -- Traffic density proxy: vehicle count (from inductive loop sensor `vehiculos_contados`)
 
 **GPS Congestion Levels:**
 - **ALTA** (High): average speed < 10 km/h
@@ -326,6 +326,25 @@ After Failover:
 5. Monitoring queries are served from the replica database
 6. The system continues operating without interruption
 
+### Fallback Monitoring CLI
+
+When PC3 is down, the monitoring CLI on PC3 is unavailable. A fallback CLI on PC2 provides the same functionality:
+
+```bash
+docker exec -it pc2-analytics python -m pc2.monitoring_fallback
+```
+
+This connects to the analytics REP socket on `localhost:5561` and queries the replica DB directly.
+
+### Auto-Recovery
+
+When PC3 comes back online, the health checker detects the restored `PONG` response and automatically:
+1. Reconnects the primary PUSH socket to PC3
+2. Resumes dual writes (primary + replica)
+3. Logs `[RECOVERY] PC3 is back`
+
+No manual intervention is required. Data written during the failover period only exists in the replica (no DB resync).
+
 ### Testing Failover
 
 ```bash
@@ -342,8 +361,12 @@ docker compose logs -f pc2-analytics
 # Verify system continues operating
 # (sensors still generate data, analytics still processes, DB replica still receives writes)
 
-# Restore PC3
+# Use fallback monitoring CLI on PC2
+docker exec -it pc2-analytics python -m pc2.monitoring_fallback
+
+# Restore PC3 - auto-recovery kicks in
 docker start pc3-monitoring
+# PC2 logs should show: [RECOVERY] PC3 is back
 ```
 
 ---
