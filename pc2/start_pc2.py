@@ -123,6 +123,10 @@ def main(argv: list[str] | None = None) -> None:
     _launch(analytics_cmd, "Analytics Service")
 
     logger.info("All PC2 processes launched (%d total).", len(_processes))
+    logger.info(
+        "If PC3 fails, use the fallback monitoring CLI:\n"
+        "  docker exec -it pc2-analytics python -m pc2.monitoring_fallback"
+    )
 
     # 4. Monitor processes
     try:
