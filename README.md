@@ -93,7 +93,7 @@ The analytics service evaluates sensor data against these rules to determine the
 
 **GPS Congestion Levels:**
 - **ALTA** (High): average speed < 10 km/h
-- **NORMAL**: 11 <= average speed <= 39 km/h
+- **NORMAL**: 10 <= average speed <= 40 km/h
 - **BAJA** (Low): average speed > 40 km/h
 
 ---
@@ -117,10 +117,10 @@ docker compose up --build
 # Run in detached mode
 docker compose up --build -d
 
-# View logs for a specific container
-docker compose logs -f pc1-sensors-broker
-docker compose logs -f pc2-analytics
-docker compose logs -f pc3-monitoring
+# View logs for a specific service (use service names, not container names)
+docker compose logs -f pc1
+docker compose logs -f pc2
+docker compose logs -f pc3
 
 # Stop the system
 docker compose down
@@ -148,8 +148,12 @@ To run with the multithreaded broker (for performance experiments), set the envi
 #     - SENSOR_INTERVAL=5
 
 # Or override at runtime:
-docker compose run -e BROKER_MODE=threaded -e SENSOR_INTERVAL=5 pc1
+BROKER_MODE=threaded SENSOR_INTERVAL=5 docker compose up pc1
 ```
+
+> **Note:** `SENSOR_INTERVAL=0` (the default in `docker-compose.yml`) means "use each
+> sensor type's configured default interval" -- 10s for cameras and GPS, 30s for
+> inductive loops. Setting a non-zero value overrides the interval for **all** sensor types.
 
 ### Running Locally (Development)
 
@@ -167,6 +171,8 @@ $env:PYTHONPATH = (Get-Location).Path
 
 # 3. Start PC1 (sensors + broker)
 python pc1/start_pc1.py
+# Options: --broker-mode standard|threaded  (default: standard, env: BROKER_MODE)
+#          --interval N                     (seconds, 0 = use config defaults, env: SENSOR_INTERVAL)
 
 # Or start individual components:
 python -m pc1.broker --mode standard
@@ -175,10 +181,14 @@ python -m pc1.sensors.inductive_sensor --all --interval 30
 python -m pc1.sensors.gps_sensor --all --interval 10
 
 # 4. Start PC2 (analytics + semaphore control + replica DB)
-python pc2/start_pc2.py
+# Note: --replica-db-path defaults to /data/traffic_replica.db (Docker path).
+#       Override for local development:
+python pc2/start_pc2.py --replica-db-path ./traffic_replica.db
 
 # 5. Start PC3 (monitoring CLI + primary DB)
-python pc3/start_pc3.py
+# Note: --db-path defaults to /data/traffic_primary.db (Docker path).
+#       Override for local development:
+python pc3/start_pc3.py --db-path ./traffic_primary.db
 ```
 
 #### Running a Single Sensor
@@ -354,8 +364,8 @@ docker compose up -d
 # Simulate PC3 failure
 docker stop pc3-monitoring
 
-# Observe failover in PC2 logs
-docker compose logs -f pc2-analytics
+# Observe failover in PC2 logs (use service name, not container name)
+docker compose logs -f pc2
 # Should show: [FAILOVER] PC3 is down. Using replica DB on PC2.
 
 # Verify system continues operating
@@ -384,6 +394,11 @@ The project requires comparing two broker designs under different load condition
 | **2A** | 2 of each type (6 total) | 5 seconds | Standard (single-thread) |
 | **2B** | 2 of each type (6 total) | 5 seconds | Multithreaded |
 
+> **Note:** Sensor count control (1 or 2 per type) requires Phase 7 implementation.
+> Currently `start_pc1.py` always launches all 8 sensors of each type from config.
+> The `SENSOR_INTERVAL` environment variable controls the generation interval for
+> all sensor types simultaneously.
+
 ### Variables Measured
 
 **Dependent variables (what we measure):**
@@ -398,17 +413,30 @@ The project requires comparing two broker designs under different load condition
 ### Running Experiments
 
 ```bash
-# Scenario 1A: 1 sensor per type, 10s interval, standard broker
-docker compose run -e BROKER_MODE=standard -e SENSOR_INTERVAL=10 pc1
+# First, start the analytics and database services in the background
+docker compose up -d pc2 pc3
 
-# Scenario 1B: 1 sensor per type, 10s interval, threaded broker
-docker compose run -e BROKER_MODE=threaded -e SENSOR_INTERVAL=10 pc1
+# Then run each scenario (pc1 runs in foreground).
+# Note: sensor count control (1 or 2 per type) is not yet implemented;
+# these commands currently run all 24 sensors with the specified interval.
 
-# Scenario 2A: 2 sensors per type, 5s interval, standard broker
-docker compose run -e BROKER_MODE=standard -e SENSOR_INTERVAL=5 pc1
+# Scenario 1A: 10s interval, standard broker
+BROKER_MODE=standard SENSOR_INTERVAL=10 docker compose up pc1
 
-# Scenario 2B: 2 sensors per type, 5s interval, threaded broker
-docker compose run -e BROKER_MODE=threaded -e SENSOR_INTERVAL=5 pc1
+# Scenario 1B: 10s interval, threaded broker
+BROKER_MODE=threaded SENSOR_INTERVAL=10 docker compose up pc1
+
+# Scenario 2A: 5s interval, standard broker
+BROKER_MODE=standard SENSOR_INTERVAL=5 docker compose up pc1
+
+# Scenario 2B: 5s interval, threaded broker
+BROKER_MODE=threaded SENSOR_INTERVAL=5 docker compose up pc1
+
+# Stop pc1 between scenarios (pc2 and pc3 stay running)
+docker compose stop pc1
+
+# Tear down everything when done
+docker compose down
 ```
 
 ### Broker Modes

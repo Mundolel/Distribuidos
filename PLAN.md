@@ -157,7 +157,7 @@ Each sensor type runs as a single process handling all sensors of that type via 
 
 - [x] **Camera sensor** (`camera_sensor.py`): Publishes on topic `"camara"`. Generates random `volumen` (0-20 vehicles) and `velocidad_promedio` (5-50 km/h) at configured intervals.
 - [x] **Inductive loop sensor** (`inductive_sensor.py`): Publishes on topic `"espira"`. Generates random `vehiculos_contados` (0-30) every 30 seconds.
-- [x] **GPS sensor** (`gps_sensor.py`): Publishes on topic `"gps"`. Generates random `velocidad_promedio` and derives `nivel_congestion` (ALTA < 10, NORMAL 11-39, BAJA > 40).
+- [x] **GPS sensor** (`gps_sensor.py`): Publishes on topic `"gps"`. Generates random `velocidad_promedio` and derives `nivel_congestion` (ALTA < 10, NORMAL 10-40, BAJA > 40).
 
 All sensors:
 - Accept CLI params or read config for: intersection ID, generation interval
@@ -203,7 +203,7 @@ GPS event (EVENTO_DENSIDAD_DE_TRAFICO - Dt):
 
 Congestion level rules for GPS:
 - ALTA: velocidad_promedio < 10
-- NORMAL: 11 <= velocidad_promedio <= 39
+- NORMAL: 10 <= velocidad_promedio <= 40
 - BAJA: velocidad_promedio > 40
 
 #### Step 2.2 - ZMQ Broker (`broker.py`)
