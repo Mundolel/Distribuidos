@@ -73,7 +73,7 @@ wave for ambulance passage).
 - REQ socket connects to `tcp://pc2:5561`
 - 6 monitoring commands + exit option
 - Pretty-print formatters for each response type
-- Timeout on recv (5s) to avoid hanging if PC2 is down
+- Timeout on recv (10s, `RCVTIMEO = 10000`) to avoid hanging if PC2 is down
 
 ### 3. `pc3/start_pc3.py` (~100 lines)
 - Launches `db_primary` as background subprocess

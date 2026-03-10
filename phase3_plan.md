@@ -80,7 +80,7 @@ to monitoring queries from PC3.
 - Updates in-memory state, logs every change
 - Format: `[INT-B3] NS: RED->GREEN, EW: GREEN->RED (reason: congestion detected)`
 
-### 3. `pc2/analytics_service.py` (~350 lines)
+### 3. `pc2/analytics_service.py` (~968 lines, grew with monitoring handlers, failover integration, green wave logic)
 - Core brain of the system
 - 5 ZMQ sockets (see table above)
 - zmq.Poller monitors SUB + REP

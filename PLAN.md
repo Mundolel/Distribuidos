@@ -9,7 +9,7 @@
 | Database | **SQLite3** (built into Python) | Public Domain |
 | Containers | **Docker + Docker Compose** | Apache 2.0 |
 | Serialization | **JSON** (stdlib) | - |
-| Config | **YAML** via `pyyaml` or JSON | MIT |
+| Config | **JSON** (stdlib `json`) | - |
 | Logging | Python `logging` (stdlib) | - |
 | Testing/Metrics | `time` (stdlib), `pytest` | MIT |
 
@@ -20,35 +20,58 @@
 ```
 distribuidos/
 ├── config/
-│   └── city_config.json          # Grid size, sensors, rules, timings
+│   └── city_config.json          # Grid size, sensors, rules, timings, ports, network
 ├── common/
 │   ├── __init__.py
 │   ├── models.py                 # Data classes for events, commands
 │   ├── constants.py              # Ports, topics, congestion thresholds
+│   ├── config_loader.py          # Config singleton loader
 │   └── db_utils.py               # SQLite helper (create tables, insert, query)
 ├── pc1/
+│   ├── __init__.py
 │   ├── sensors/
+│   │   ├── __init__.py
 │   │   ├── camera_sensor.py      # PUB - Queue length events (Lq)
 │   │   ├── inductive_sensor.py   # PUB - Vehicle count events (Cv)
 │   │   └── gps_sensor.py         # PUB - Traffic density events (Dt)
-│   └── broker.py                 # SUB (from sensors) -> PUB (to PC2)
+│   ├── broker.py                 # SUB (from sensors) -> PUB (to PC2) - standard
+│   ├── broker_threaded.py        # Multithreaded broker variant (inproc PUSH/PULL)
+│   └── start_pc1.py              # Launcher: broker + all sensors as subprocesses
 ├── pc2/
-│   ├── analytics_service.py      # SUB (from broker) + REP (from PC3) + PUSH (to DB)
+│   ├── __init__.py
+│   ├── analytics_service.py      # SUB (from broker) + REP (from PC3) + PUSH (to DBs)
 │   ├── traffic_light_control.py  # Receives commands, manages semaphore states
-│   └── db_replica.py             # PULL - receives data for replica SQLite DB
+│   ├── db_replica.py             # PULL - receives data for replica SQLite DB
+│   ├── health_checker.py         # FailoverState + health check daemon thread
+│   ├── monitoring_fallback.py    # Fallback monitoring CLI on PC2 during failover
+│   └── start_pc2.py              # Launcher: db_replica + semaphore + analytics
 ├── pc3/
+│   ├── __init__.py
 │   ├── monitoring_service.py     # REQ/REP queries + direct commands to analytics
-│   └── db_primary.py             # PULL - receives data for primary SQLite DB
+│   ├── db_primary.py             # PULL - receives data for primary SQLite DB + health REP
+│   └── start_pc3.py              # Launcher: db_primary subprocess + monitoring foreground
 ├── docker-compose.yml
 ├── Dockerfile.pc1
 ├── Dockerfile.pc2
 ├── Dockerfile.pc3
+├── .dockerignore
 ├── requirements.txt
+├── requirements-dev.txt          # Extends requirements.txt + ruff
+├── ruff.toml                     # Linter/formatter configuration
+├── .github/
+│   └── workflows/
+│       └── ci.yml                # CI pipeline: ruff check + format + pytest
+├── PLAN.md                       # This file - master development plan
+├── phase3_plan.md                # Phase 3 design decisions
+├── phase4_plan.md                # Phase 4 design decisions
+├── phase5_plan.md                # Phase 5 design decisions
+├── README.md                     # Project readme with usage instructions
 └── tests/
-    ├── test_sensors.py
-    ├── test_analytics.py
-    ├── test_failover.py
-    └── test_performance.py
+    ├── test_common.py            # 25 tests - models, config, DB utils
+    ├── test_sensors.py           # 19 tests - sensor event generation
+    ├── test_analytics.py         # 32 tests - analytics, rules, semaphore control
+    ├── test_monitoring.py        # 26 tests - DB primary, monitoring CLI, health check
+    └── test_failover.py          # 15 tests - failover state, health checker, recovery
 ```
 
 ---
@@ -68,33 +91,48 @@ distribuidos/
 - [x] Define ZMQ ports and addresses
 - [x] Define traffic rules and thresholds
 
-Example config:
+Example config (see `config/city_config.json` for the full version):
 ```json
 {
-  "grid": { "rows": ["A","B","C","D"], "columns": [1,2,3,4] },
+  "city": {
+    "name": "Ciudad Simulada",
+    "grid": { "rows": ["A","B","C","D"], "columns": [1,2,3,4] }
+  },
   "sensors": {
-    "cameras": ["INT-A1","INT-B2","INT-C3","INT-D4"],
-    "inductive": ["INT-A2","INT-B3","INT-C4"],
-    "gps": ["INT-A3","INT-B4","INT-C1"]
+    "cameras": [{"sensor_id": "CAM-A1", "interseccion": "INT-A1"}, ...],
+    "inductive_loops": [{"sensor_id": "ESP-A2", "interseccion": "INT-A2"}, ...],
+    "gps": [{"sensor_id": "GPS-A1", "interseccion": "INT-A1"}, ...]
   },
   "rules": {
-    "normal": { "Q_max": 5, "Vp_min": 35, "D_max": 20 },
-    "congestion": { "Q_min": 10, "Vp_max": 20, "D_min": 40 },
-    "green_wave": { "priority": true }
+    "normal": { "conditions": { "Q_max": 5, "Vp_min": 35, "D_max": 20 } },
+    "congestion": { "conditions": { "Q_min": 10, "Vp_max": 20, "D_min": 40 } },
+    "green_wave": { "conditions": { "trigger": "user_command" } }
   },
   "timings": {
-    "normal_red_duration_sec": 15,
-    "congestion_green_extension_sec": 10,
-    "sensor_interval_sec": 10
+    "normal_cycle_sec": 15,
+    "congestion_extension_sec": 10,
+    "green_wave_duration_sec": 30,
+    "sensor_default_interval_sec": 10,
+    "inductive_interval_sec": 30,
+    "health_check_interval_sec": 5,
+    "health_check_timeout_ms": 2000,
+    "health_check_max_retries": 3
   },
   "zmq_ports": {
-    "sensor_pub": 5555,
-    "broker_pub": 5556,
-    "analytics_pull": 5557,
-    "db_primary_pull": 5558,
-    "db_replica_pull": 5559,
-    "monitoring_req": 5560,
-    "semaphore_control": 5561
+    "sensor_camera_pub": 5555,
+    "sensor_inductive_pub": 5556,
+    "sensor_gps_pub": 5557,
+    "broker_pub": 5560,
+    "analytics_rep": 5561,
+    "semaphore_control_pull": 5562,
+    "db_primary_pull": 5563,
+    "db_replica_pull": 5564,
+    "health_check_rep": 5565
+  },
+  "network": {
+    "pc1_host": "pc1",
+    "pc2_host": "pc2",
+    "pc3_host": "pc3"
   }
 }
 ```
@@ -194,7 +232,7 @@ This is the core brain of the system. Multiple ZMQ sockets:
 
 - [x] **SUB** socket: Subscribes to broker's PUB (receives all sensor events)
 - [x] **PUSH** socket (x2): Sends data to primary DB (PC3) and replica DB (PC2)
-- [x] **PUB/PUSH** to semaphore control: Sends light-change commands
+- [x] **PUSH** to semaphore control: Sends light-change commands (PUSH/PULL pattern)
 - [x] **REP** socket: Responds to monitoring queries from PC3 (REQ/REP)
 
 Logic:
@@ -264,6 +302,8 @@ Logic:
 - [x] Operation continues transparently
 - [x] Fallback monitoring CLI on PC2 (`monitoring_fallback.py`)
 - [x] Automatic recovery when PC3 comes back (health checker detects PONG)
+- [x] **Separate ZMQ context** for PC3-bound sockets: When PC3's Docker container stops, DNS resolution blocks ZMQ I/O threads. Using a dedicated `pc3_context` isolates these from the main context's SUB/REP sockets
+- [x] **Thread-safe `_send_to_primary()` callable**: `push_to_dbs()` accepts `Callable[[str], None] | None` instead of raw socket. The callable holds a lock during send so the health checker's failover callback can't close the socket mid-send. Uses `zmq.NOBLOCK` to never block the main loop
 
 #### Step 5.3 - Testing failover
 - [x] 15 unit tests covering FailoverState, HealthChecker, push_to_dbs, full integration
@@ -278,17 +318,30 @@ Logic:
 services:
   pc1:
     build: { context: ., dockerfile: Dockerfile.pc1 }
+    container_name: pc1-sensors-broker
     networks: [traffic-net]
+    depends_on:
+      pc2: { condition: service_started }
+    environment:
+      - BROKER_MODE=${BROKER_MODE:-standard}
+      - SENSOR_INTERVAL=${SENSOR_INTERVAL:-0}
+    restart: unless-stopped
   pc2:
     build: { context: ., dockerfile: Dockerfile.pc2 }
+    container_name: pc2-analytics
     networks: [traffic-net]
     volumes: [pc2-data:/data]
+    restart: unless-stopped
   pc3:
     build: { context: ., dockerfile: Dockerfile.pc3 }
+    container_name: pc3-monitoring
     networks: [traffic-net]
     volumes: [pc3-data:/data]
+    depends_on:
+      pc2: { condition: service_started }
     stdin_open: true
     tty: true
+    restart: unless-stopped
 
 networks:
   traffic-net:
@@ -380,8 +433,9 @@ Sensor (PUB) --[camara/espira/gps]--> Broker (SUB/PUB) --[all topics]--> Analyti
                                                                               |
                                                            PUSH/PULL --------+-----> DB Primary (PC3)
                                                            PUSH/PULL --------+-----> DB Replica (PC2)
-                                                           PUB/PUSH ---------+-----> Semaphore Control (PC2)
+                                                           PUSH/PULL --------+-----> Semaphore Control (PC2)
                                                            REP <---REQ-------+-----> Monitoring (PC3)
+                                                           REQ/REP ----------+-----> Health Check (PC3)
 ```
 
 ## Traffic Rules (Proposed)
