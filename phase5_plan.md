@@ -85,6 +85,27 @@ From the rubric (Excelente):
 - On timeout, we must close and recreate the REQ socket before retrying
 - This is a well-known ZMQ pattern called "Lazy Pirate"
 
+### 7. Separate ZMQ Context for PC3-Bound Sockets (Critical Discovery)
+
+- **Problem**: When a Docker container is stopped, its DNS hostname becomes
+  unresolvable. ZMQ sockets connected to that hostname have their I/O threads
+  block on DNS resolution during reconnection attempts. If those sockets share
+  a `zmq.Context` with other sockets (like the SUB from broker), ALL sockets
+  in that context starve of I/O thread time and stop receiving messages.
+- **Solution**: Use a dedicated `pc3_context = zmq.Context()` for PC3-bound
+  sockets (primary PUSH + health checker REQ). This isolates the I/O threads
+  so the main context's SUB and REP sockets continue working during failover.
+
+### 8. Thread-Safe Primary PUSH via `_send_to_primary()` Callable
+
+- `push_to_dbs()` accepts `Callable[[str], None] | None` instead of a raw
+  `zmq.Socket | None` as its first parameter
+- The callable closure holds `_primary_push_lock` during the entire send
+  so the health checker's `_on_failover` callback can't close the socket mid-send
+- Uses `zmq.NOBLOCK` on primary pushes to never block the analytics main loop
+- On failover, the callable is set to `None`; on recovery, a new callable
+  is created wrapping the new PUSH socket
+
 ---
 
 ## Architecture During Normal Operation
@@ -138,9 +159,9 @@ PC2                                     PC3 (DOWN)
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `pc2/health_checker.py` | ~130 | Health check module with FailoverState + checker thread |
-| `pc2/monitoring_fallback.py` | ~50 | Fallback monitoring CLI for PC2 |
-| `tests/test_failover.py` | ~150 | Unit tests for health checker + failover logic |
+| `pc2/health_checker.py` | ~221 | Health check module with FailoverState + checker thread |
+| `pc2/monitoring_fallback.py` | ~110 | Fallback monitoring CLI for PC2 |
+| `tests/test_failover.py` | ~444 | Unit tests for health checker + failover logic |
 | `phase5_plan.md` | this file | Design decisions |
 
 ### Modified Files
