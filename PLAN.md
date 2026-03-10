@@ -249,29 +249,29 @@ Logic:
 
 ---
 
-### PHASE 5: Fault Tolerance (Days 10-12)
+### PHASE 5: Fault Tolerance (Days 10-12) ✅ COMPLETED
 
 #### Step 5.1 - Health check mechanism
-- [ ] PC2's analytics service periodically sends a heartbeat **REQ** to PC3's DB
-- [ ] If no response after N attempts (e.g., 3 retries with 2s timeout), declare PC3 as failed
-- [ ] Implement using ZMQ `RCVTIMEO` socket option
+- [x] PC2's analytics service periodically sends a heartbeat **REQ** to PC3's DB
+- [x] If no response after N attempts (e.g., 3 retries with 2s timeout), declare PC3 as failed
+- [x] Implement using ZMQ `RCVTIMEO` socket option (Lazy Pirate pattern with socket recreation)
 
 #### Step 5.2 - Failover logic
-- [ ] When PC3 failure detected:
+- [x] When PC3 failure detected:
   1. Analytics redirects all PUSH writes to PC2's replica only
-  2. Monitoring queries are redirected to PC2's replica DB
+  2. PUSH socket to PC3 is disconnected to prevent ZMQ buffering
   3. Print alert: `"[FAILOVER] PC3 is down. Using replica DB on PC2."`
-- [ ] Operation continues transparently
-- [ ] When PC3 comes back, resync mechanism (optional but recommended)
+- [x] Operation continues transparently
+- [x] Fallback monitoring CLI on PC2 (`monitoring_fallback.py`)
+- [x] Automatic recovery when PC3 comes back (health checker detects PONG)
 
 #### Step 5.3 - Testing failover
-- [ ] Run system normally, then `docker stop pc3`
-- [ ] Verify system continues operating using replica
-- [ ] Verify queries still return correct data
+- [x] 15 unit tests covering FailoverState, HealthChecker, push_to_dbs, full integration
+- [x] All 117 tests passing (`pytest tests/ -v`)
 
 ---
 
-### PHASE 6: Docker & Networking (Days 12-13)
+### PHASE 6: Docker & Networking (Days 12-13) ✅ COMPLETED
 
 #### Step 6.1 - Docker Compose setup
 ```yaml
@@ -300,10 +300,14 @@ volumes:
 ```
 
 #### Step 6.2 - Dockerfiles
-- [ ] Based on `python:3.11-slim`
-- [ ] Install `pyzmq`
-- [ ] Copy respective PC code + common modules
-- [ ] Entrypoint scripts that launch all processes for that PC
+- [x] Based on `python:3.11-slim`
+- [x] Install `pyzmq`
+- [x] Copy respective PC code + common modules
+- [x] Entrypoint scripts that launch all processes for that PC
+- [x] Build and verify all 3 images
+- [x] Integration test: docker compose up, verify cross-container ZMQ communication
+- [x] Failover test: docker stop pc3, verify system continues on replica
+- [x] Recovery test: docker start pc3, verify auto-recovery
 
 ---
 
