@@ -27,6 +27,8 @@ Usage:
 import json
 import logging
 import signal
+import threading
+from collections.abc import Callable
 
 import zmq
 
@@ -48,6 +50,7 @@ from common.constants import (
     SENSOR_TYPE_CAMERA,
     SENSOR_TYPE_GPS,
     SENSOR_TYPE_INDUCTIVE,
+    STATUS_FAILOVER,
     STATUS_OK,
     TOPIC_CAMERA,
     TOPIC_GPS,
@@ -64,6 +67,7 @@ from common.models import (
     from_json,
     now_iso,
 )
+from pc2.health_checker import FailoverState, HealthChecker
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -322,8 +326,9 @@ def handle_monitoring_query(
     local_db: TrafficDB,
     config,
     semaphore_push: zmq.Socket,
-    db_primary_push: zmq.Socket,
+    send_to_primary: Callable[[str], None] | None,
     db_replica_push: zmq.Socket,
+    failover_state: FailoverState | None = None,
 ) -> MonitoringResponse:
     """
     Handle a monitoring query from PC3 and return a response.
@@ -334,8 +339,9 @@ def handle_monitoring_query(
         local_db: Local replica DB for queries (used during failover too).
         config: CityConfig instance.
         semaphore_push: PUSH socket to semaphore control.
-        db_primary_push: PUSH socket to primary DB.
+        send_to_primary: Thread-safe callable to send to primary DB (or None).
         db_replica_push: PUSH socket to replica DB.
+        failover_state: Optional FailoverState for failover-aware DB writes.
 
     Returns:
         MonitoringResponse with the result.
@@ -348,14 +354,25 @@ def handle_monitoring_query(
         return _handle_query_history(query, local_db)
     elif cmd == CMD_FORCE_GREEN_WAVE:
         return _handle_force_green_wave(
-            query, intersection_data, config, semaphore_push, db_primary_push, db_replica_push
+            query,
+            intersection_data,
+            config,
+            semaphore_push,
+            send_to_primary,
+            db_replica_push,
+            failover_state,
         )
     elif cmd == CMD_FORCE_SEMAPHORE:
         return _handle_force_semaphore(
-            query, config, semaphore_push, db_primary_push, db_replica_push
+            query,
+            config,
+            semaphore_push,
+            send_to_primary,
+            db_replica_push,
+            failover_state,
         )
     elif cmd == CMD_SYSTEM_STATUS:
-        return _handle_system_status(intersection_data, local_db)
+        return _handle_system_status(intersection_data, local_db, failover_state)
     elif cmd == CMD_HEALTH_CHECK:
         return MonitoringResponse(
             status=STATUS_OK,
@@ -425,8 +442,9 @@ def _handle_force_green_wave(
     intersection_data: dict[str, dict],
     config,
     semaphore_push: zmq.Socket,
-    db_primary_push: zmq.Socket,
+    send_to_primary: Callable[[str], None] | None,
     db_replica_push: zmq.Socket,
+    failover_state: FailoverState | None = None,
 ) -> MonitoringResponse:
     """Handle FORCE_GREEN_WAVE: force green on all intersections in a row or column."""
     row = query.row
@@ -473,18 +491,16 @@ def _handle_force_green_wave(
         if intersection in intersection_data:
             intersection_data[intersection]["traffic_state"] = TRAFFIC_GREEN_WAVE
 
-        # Push semaphore state to DBs
+        # Push semaphore state to DBs (failover-aware)
         state_envelope = make_semaphore_state_envelope(
             intersection, SEMAPHORE_GREEN, SEMAPHORE_RED, reason, green_wave_duration
         )
-        db_primary_push.send_string(state_envelope)
-        db_replica_push.send_string(state_envelope)
+        push_to_dbs(send_to_primary, db_replica_push, state_envelope, failover_state)
 
     # Record priority action
     target = f"row_{row}" if row else f"col_{column}"
     action_envelope = make_priority_action_envelope(DECISION_GREEN_WAVE, target, reason, affected)
-    db_primary_push.send_string(action_envelope)
-    db_replica_push.send_string(action_envelope)
+    push_to_dbs(send_to_primary, db_replica_push, action_envelope, failover_state)
 
     logger.info(
         "[GREEN WAVE] %s -> %d intersections: %s (reason: %s)",
@@ -506,8 +522,9 @@ def _handle_force_semaphore(
     query: MonitoringQuery,
     config,
     semaphore_push: zmq.Socket,
-    db_primary_push: zmq.Socket,
+    send_to_primary: Callable[[str], None] | None,
     db_replica_push: zmq.Socket,
+    failover_state: FailoverState | None = None,
 ) -> MonitoringResponse:
     """Handle FORCE_SEMAPHORE: force a specific semaphore change."""
     intersection = query.interseccion
@@ -535,8 +552,7 @@ def _handle_force_semaphore(
     state_envelope = make_semaphore_state_envelope(
         intersection, result_ns, result_ew, reason, config.normal_cycle_sec
     )
-    db_primary_push.send_string(state_envelope)
-    db_replica_push.send_string(state_envelope)
+    push_to_dbs(send_to_primary, db_replica_push, state_envelope, failover_state)
 
     logger.info(
         "[FORCE SEMAPHORE] %s -> %s (reason: %s)",
@@ -556,8 +572,9 @@ def _handle_force_semaphore(
 def _handle_system_status(
     intersection_data: dict[str, dict],
     local_db: TrafficDB,
+    failover_state: FailoverState | None = None,
 ) -> MonitoringResponse:
-    """Handle SYSTEM_STATUS: return overall system summary."""
+    """Handle SYSTEM_STATUS: return overall system summary including failover info."""
     db_summary = local_db.get_system_summary()
 
     # Count current congested intersections
@@ -568,15 +585,19 @@ def _handle_system_status(
         k for k, v in intersection_data.items() if v["traffic_state"] == TRAFFIC_GREEN_WAVE
     ]
 
+    pc3_alive = failover_state.is_pc3_alive() if failover_state else True
+    status = STATUS_OK if pc3_alive else STATUS_FAILOVER
+
     return MonitoringResponse(
-        status=STATUS_OK,
+        status=status,
         command=CMD_SYSTEM_STATUS,
-        message="System status summary",
+        message="System status summary" + ("" if pc3_alive else " [FAILOVER MODE]"),
         data={
             "db_summary": db_summary,
             "currently_congested": congested,
             "currently_green_wave": green_wave_active,
             "total_intersections": len(intersection_data),
+            "pc3_alive": pc3_alive,
         },
     )
 
@@ -587,12 +608,25 @@ def _handle_system_status(
 
 
 def push_to_dbs(
-    db_primary_push: zmq.Socket,
+    send_to_primary: Callable[[str], None] | None,
     db_replica_push: zmq.Socket,
     envelope_json: str,
+    failover_state: FailoverState | None = None,
 ) -> None:
-    """Send a DB write envelope to both primary and replica databases."""
-    db_primary_push.send_string(envelope_json)
+    """
+    Send a DB write envelope to both primary and replica databases.
+
+    During failover (PC3 down), the primary send is skipped.
+
+    Args:
+        send_to_primary: Thread-safe callable that sends to the primary DB
+            PUSH socket (holds the lock internally).  None means no primary.
+        db_replica_push: PUSH socket to replica DB (local, no lock needed).
+        envelope_json: JSON-encoded DB envelope to send.
+        failover_state: Shared failover state (checked before primary send).
+    """
+    if send_to_primary is not None and (failover_state is None or failover_state.is_pc3_alive()):
+        send_to_primary(envelope_json)
     db_replica_push.send_string(envelope_json)
 
 
@@ -608,6 +642,9 @@ def run_analytics_service(replica_db_path: str = "/data/traffic_replica.db") -> 
     Polls the SUB socket (sensor events) and REP socket (monitoring queries)
     using zmq.Poller. Processes events, evaluates rules, and dispatches
     commands and data accordingly.
+
+    Includes a health-check background thread that monitors PC3 and triggers
+    automatic failover/recovery of the primary DB PUSH socket.
 
     Args:
         replica_db_path: Path to the local replica DB for monitoring queries.
@@ -641,9 +678,45 @@ def run_analytics_service(replica_db_path: str = "/data/traffic_replica.db") -> 
     logger.info("PUSH connected to semaphore control at %s", sem_addr)
 
     # --- PUSH socket: send data to primary DB on PC3 ---
-    db_primary_push = context.socket(zmq.PUSH)
+    # Uses a SEPARATE ZMQ context to isolate PC3-bound sockets.
+    # When PC3 is stopped, its DNS ("pc3") becomes unresolvable, and ZMQ's
+    # internal I/O threads block on reconnection attempts.  Sharing a context
+    # with the SUB/REP sockets would starve those sockets of I/O thread time.
+    pc3_context = zmq.Context()
     primary_addr = config.zmq_address(config.pc3_host, "db_primary_pull")
-    db_primary_push.connect(primary_addr)
+    _primary_push_lock = threading.Lock()
+    _db_primary_push: list[zmq.Socket | None] = [None]  # mutable container for closure
+
+    def _create_primary_push() -> zmq.Socket:
+        sock = pc3_context.socket(zmq.PUSH)
+        sock.setsockopt(zmq.LINGER, 0)
+        sock.setsockopt(zmq.SNDHWM, 1000)
+        sock.setsockopt(zmq.SNDTIMEO, 1000)  # 1s send timeout to prevent blocking
+        sock.connect(primary_addr)
+        return sock
+
+    def _get_primary_push() -> zmq.Socket | None:
+        with _primary_push_lock:
+            return _db_primary_push[0]
+
+    def _send_to_primary(envelope_json: str) -> None:
+        """Thread-safe send to primary DB PUSH socket.
+
+        Holds the lock for the entire send so the socket can't be closed
+        from the failover callback between getting and using it.
+        """
+        with _primary_push_lock:
+            sock = _db_primary_push[0]
+            if sock is not None:
+                try:
+                    sock.send_string(envelope_json, zmq.NOBLOCK)
+                except zmq.Again:
+                    logger.warning("[PUSH] Primary DB send dropped (HWM full)")
+                except zmq.ZMQError as e:
+                    logger.warning("[PUSH] Primary DB send error: %s", e)
+
+    # Initial connection to primary DB
+    _db_primary_push[0] = _create_primary_push()
     logger.info("PUSH connected to primary DB at %s", primary_addr)
 
     # --- PUSH socket: send data to replica DB (local on PC2) ---
@@ -651,6 +724,40 @@ def run_analytics_service(replica_db_path: str = "/data/traffic_replica.db") -> 
     replica_addr = f"tcp://127.0.0.1:{config.get_port('db_replica_pull')}"
     db_replica_push.connect(replica_addr)
     logger.info("PUSH connected to replica DB at %s", replica_addr)
+
+    # --- Failover state + health checker ---
+
+    def _on_failover():
+        """Called by health checker when PC3 failure is confirmed."""
+        with _primary_push_lock:
+            if _db_primary_push[0] is not None:
+                logger.info("[FAILOVER] Disconnecting primary DB PUSH socket")
+                _db_primary_push[0].close()
+                _db_primary_push[0] = None
+
+    def _on_recovery():
+        """Called by health checker when PC3 comes back."""
+        with _primary_push_lock:
+            if _db_primary_push[0] is None:
+                logger.info(
+                    "[RECOVERY] Reconnecting primary DB PUSH to %s",
+                    primary_addr,
+                )
+                _db_primary_push[0] = _create_primary_push()
+
+    failover_state = FailoverState(
+        on_failover=_on_failover,
+        on_recovery=_on_recovery,
+    )
+
+    health_checker = HealthChecker(
+        context=pc3_context,  # separate context for PC3-bound sockets
+        state=failover_state,
+        config=config,
+        running=lambda: _running,
+    )
+    health_checker.start()
+    logger.info("Health checker thread started (monitoring PC3)")
 
     # --- Poller ---
     poller = zmq.Poller()
@@ -679,9 +786,14 @@ def run_analytics_service(replica_db_path: str = "/data/traffic_replica.db") -> 
                         intersection_data, topic, event_data
                     )
 
-                    # Push raw event to both DBs
+                    # Push raw event to both DBs (failover-aware)
                     event_envelope = make_sensor_event_envelope(event_data, topic)
-                    push_to_dbs(db_primary_push, db_replica_push, event_envelope)
+                    push_to_dbs(
+                        _send_to_primary,
+                        db_replica_push,
+                        event_envelope,
+                        failover_state,
+                    )
 
                     # Also insert into local DB for query access
                     tipo_sensor = event_data.get("tipo_sensor", "unknown")
@@ -744,13 +856,23 @@ def run_analytics_service(replica_db_path: str = "/data/traffic_replica.db") -> 
                                 cmd.reason,
                                 total_cycle,
                             )
-                            push_to_dbs(db_primary_push, db_replica_push, state_envelope)
+                            push_to_dbs(
+                                _send_to_primary,
+                                db_replica_push,
+                                state_envelope,
+                                failover_state,
+                            )
 
                         # Push congestion record to DBs (for all states, not just congestion)
                         congestion_envelope = make_congestion_envelope(
                             intersection, traffic_state, decision, sensor_snapshot
                         )
-                        push_to_dbs(db_primary_push, db_replica_push, congestion_envelope)
+                        push_to_dbs(
+                            _send_to_primary,
+                            db_replica_push,
+                            congestion_envelope,
+                            failover_state,
+                        )
 
                         # Also insert congestion record in local DB
                         local_db.insert_congestion_record(
@@ -783,8 +905,9 @@ def run_analytics_service(replica_db_path: str = "/data/traffic_replica.db") -> 
                         local_db,
                         config,
                         semaphore_push,
-                        db_primary_push,
+                        _send_to_primary,
                         db_replica_push,
+                        failover_state,
                     )
 
                     monitoring_rep.send_string(response.to_json())
@@ -814,8 +937,11 @@ def run_analytics_service(replica_db_path: str = "/data/traffic_replica.db") -> 
         sensor_sub.close()
         monitoring_rep.close()
         semaphore_push.close()
-        db_primary_push.close()
+        with _primary_push_lock:
+            if _db_primary_push[0] is not None:
+                _db_primary_push[0].close()
         db_replica_push.close()
+        pc3_context.term()
         context.term()
 
 
