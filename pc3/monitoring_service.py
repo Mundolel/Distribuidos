@@ -179,7 +179,7 @@ def format_semaphore_response(resp: MonitoringResponse) -> None:
 
 def format_system_status_response(resp: MonitoringResponse) -> None:
     """Pretty-print a SYSTEM_STATUS response."""
-    if resp.status != "OK":
+    if resp.status not in ("OK", "FAILOVER"):
         print(f"  ERROR: {resp.message}")
         return
 
@@ -188,8 +188,11 @@ def format_system_status_response(resp: MonitoringResponse) -> None:
     congested = data.get("currently_congested", [])
     green_wave = data.get("currently_green_wave", [])
     total = data.get("total_intersections", "?")
+    pc3_alive = data.get("pc3_alive", True)
 
     print_response_header("System Status")
+    if not pc3_alive:
+        print("  *** FAILOVER MODE - PC3 is DOWN, using replica DB ***")
     print(f"  Total Sensor Events    : {summary.get('total_sensor_events', '?')}")
     print(f"  Congestion Detections  : {summary.get('total_congestion_detections', '?')}")
     print(f"  Green Waves            : {summary.get('total_green_waves', '?')}")
@@ -197,6 +200,7 @@ def format_system_status_response(resp: MonitoringResponse) -> None:
     print(f"  Currently Congested    : {', '.join(congested) if congested else '(none)'}")
     print(f"  Active Green Waves     : {', '.join(green_wave) if green_wave else '(none)'}")
     print(f"  Total Intersections    : {total}")
+    print(f"  PC3 Status             : {'ALIVE' if pc3_alive else 'DOWN (FAILOVER)'}")
     print_separator()
 
 
