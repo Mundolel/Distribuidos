@@ -27,8 +27,7 @@ from common.constants import (
 )
 from common.db_utils import TrafficDB
 from common.models import MonitoringQuery, MonitoringResponse
-from pc3.db_primary import process_envelope
-from pc3.monitoring_service import (
+from common.monitoring_commands import (
     format_green_wave_response,
     format_health_check_response,
     format_history_response,
@@ -36,6 +35,7 @@ from pc3.monitoring_service import (
     format_semaphore_response,
     format_system_status_response,
 )
+from pc3.db_primary import process_envelope
 
 # =============================================================================
 # Helpers
