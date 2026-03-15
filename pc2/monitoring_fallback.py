@@ -21,7 +21,7 @@ import logging
 import zmq
 
 from common.config_loader import get_config
-from pc3.monitoring_service import (
+from common.monitoring_commands import (
     MENU,
     do_force_green_wave,
     do_force_semaphore,
