@@ -36,7 +36,7 @@ import threading
 import zmq
 
 from common.config_loader import get_config
-from common.constants import HEALTH_CHECK_RESPONSE
+from common.constants import HEALTH_CHECK_MSG, HEALTH_CHECK_RESPONSE
 from common.db_utils import TrafficDB
 
 # ---------------------------------------------------------------------------
@@ -162,7 +162,7 @@ def _health_check_thread(context: zmq.Context) -> None:
     Background daemon thread that responds to health check pings from PC2.
 
     Binds a REP socket on the health_check_rep port (5565) and replies
-    "PONG" to every incoming message. PC2's analytics service uses this
+    "PONG" to incoming "PING" messages. PC2's analytics service uses this
     to detect if PC3 is alive.
     """
     config = get_config()
@@ -177,7 +177,11 @@ def _health_check_thread(context: zmq.Context) -> None:
             if rep_socket.poll(timeout=1000):
                 message = rep_socket.recv_string()
                 logger.debug("[HealthCheck] Received: %s", message)
-                rep_socket.send_string(HEALTH_CHECK_RESPONSE)
+                if message == HEALTH_CHECK_MSG:
+                    rep_socket.send_string(HEALTH_CHECK_RESPONSE)
+                else:
+                    logger.warning("[HealthCheck] Unexpected message: %s", message)
+                    rep_socket.send_string("ERROR")
     except zmq.ZMQError as e:
         if _running:
             logger.error("[HealthCheck] ZMQ error: %s", e)
