@@ -1,0 +1,92 @@
+name: Docker Sensor Count Validation
+
+on:
+  pull_request:
+    branches: [develop]
+
+jobs:
+  sensor-count:
+    name: Sensor Count Control
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build all images
+        run: docker compose build
+
+      - name: "Test SENSOR_COUNT=1 (1 sensor per type)"
+        run: |
+          SENSOR_COUNT=1 SENSOR_INTERVAL=10 docker compose up -d
+          sleep 15
+
+          # Verify the log shows "1 per type"
+          LOG_LINE=$(docker compose logs --no-color pc1 | grep "Sensor count:" | head -1)
+          echo "PC1 log: $LOG_LINE"
+          if echo "$LOG_LINE" | grep -q "1 per type"; then
+            echo "PASS: SENSOR_COUNT=1 correctly applied"
+          else
+            echo "FAIL: Expected 'Sensor count: 1 per type' in PC1 logs"
+            docker compose logs pc1 | tail -20
+            exit 1
+          fi
+
+          # Verify events are being generated (at least 1 per sensor type)
+          sleep 10
+          EVENT_COUNT=$(docker compose logs --no-color pc2 | grep -c "\[EVENT #" || true)
+          echo "Events processed: $EVENT_COUNT"
+          if [ "$EVENT_COUNT" -lt 1 ]; then
+            echo "FAIL: No events generated with SENSOR_COUNT=1"
+            exit 1
+          fi
+
+          docker compose down -v
+
+      - name: "Test SENSOR_COUNT=2 (2 sensors per type)"
+        run: |
+          SENSOR_COUNT=2 SENSOR_INTERVAL=5 docker compose up -d
+          sleep 15
+
+          # Verify the log shows "2 per type"
+          LOG_LINE=$(docker compose logs --no-color pc1 | grep "Sensor count:" | head -1)
+          echo "PC1 log: $LOG_LINE"
+          if echo "$LOG_LINE" | grep -q "2 per type"; then
+            echo "PASS: SENSOR_COUNT=2 correctly applied"
+          else
+            echo "FAIL: Expected 'Sensor count: 2 per type' in PC1 logs"
+            docker compose logs pc1 | tail -20
+            exit 1
+          fi
+
+          # With 2 sensors per type at 5s intervals, expect more events
+          sleep 10
+          EVENT_COUNT=$(docker compose logs --no-color pc2 | grep -c "\[EVENT #" || true)
+          echo "Events processed: $EVENT_COUNT"
+          if [ "$EVENT_COUNT" -lt 2 ]; then
+            echo "FAIL: Too few events generated with SENSOR_COUNT=2"
+            exit 1
+          fi
+
+          docker compose down -v
+
+      - name: "Test SENSOR_COUNT=0 (default: all sensors)"
+        run: |
+          docker compose up -d
+          sleep 10
+
+          # Verify the log shows "all per type"
+          LOG_LINE=$(docker compose logs --no-color pc1 | grep "Sensor count:" | head -1)
+          echo "PC1 log: $LOG_LINE"
+          if echo "$LOG_LINE" | grep -q "all per type"; then
+            echo "PASS: SENSOR_COUNT=0 (default) correctly launches all sensors"
+          else
+            echo "FAIL: Expected 'Sensor count: all per type' in PC1 logs"
+            docker compose logs pc1 | tail -20
+            exit 1
+          fi
+
+          docker compose down -v
+
+      - name: Teardown (safety)
+        if: always()
+        run: docker compose down -v 2>/dev/null || true

@@ -1,0 +1,160 @@
+name: Docker Build & Import Validation
+
+on:
+  push:
+    branches: [develop, "phase*", "hotfix/*"]
+  pull_request:
+    branches: [develop, main]
+
+jobs:
+  docker-smoke:
+    name: Build & Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build all Docker images
+        run: docker compose build
+
+      - name: Start all services
+        run: docker compose up -d
+
+      - name: Wait for initialization
+        run: sleep 10
+
+      - name: Verify all containers are running
+        run: |
+          echo "=== Container Status ==="
+          docker compose ps
+          # Check that all 3 services are running
+          RUNNING=$(docker compose ps --format "{{.State}}" | grep -c "running")
+          if [ "$RUNNING" -ne 3 ]; then
+            echo "FAIL: Expected 3 running containers, got $RUNNING"
+            docker compose logs
+            exit 1
+          fi
+          echo "All 3 containers running"
+
+      - name: Check no containers restarted (crash loop)
+        run: |
+          # Give containers a few more seconds to potentially crash
+          sleep 5
+          RUNNING=$(docker compose ps --format "{{.State}}" | grep -c "running")
+          if [ "$RUNNING" -ne 3 ]; then
+            echo "FAIL: Container(s) crashed after startup"
+            docker compose logs
+            exit 1
+          fi
+          echo "All containers stable after 15s"
+
+      - name: Teardown
+        if: always()
+        run: docker compose down -v
+
+  import-validation:
+    name: Import Validation Inside Containers
+    runs-on: ubuntu-latest
+    needs: docker-smoke
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build and start
+        run: docker compose up -d && sleep 10
+
+      - name: Validate PC1 imports
+        run: |
+          docker exec pc1-sensors-broker python -c "
+          from pc1.broker import main
+          from pc1.broker_threaded import main
+          from pc1.start_pc1 import parse_args
+          from pc1.sensors.camera_sensor import main
+          from pc1.sensors.inductive_sensor import main
+          from pc1.sensors.gps_sensor import main
+          from common.config_loader import get_config
+          from common.constants import TOPIC_CAMERA, TOPIC_INDUCTIVE, TOPIC_GPS
+          from common.models import CameraEvent, InductiveEvent, GPSEvent
+          from common.db_utils import TrafficDB
+          print('PC1 imports OK')
+          "
+
+      - name: Validate PC2 imports
+        run: |
+          docker exec pc2-analytics python -c "
+          from pc2.analytics_service import main
+          from pc2.traffic_light_control import main, apply_command
+          from pc2.db_replica import main
+          from pc2.health_checker import HealthChecker, FailoverState
+          from pc2.monitoring_fallback import run_fallback_cli
+          from pc2.start_pc2 import main
+          from common.monitoring_commands import MENU, send_query
+          from common.monitoring_commands import do_query_intersection, do_query_history
+          from common.monitoring_commands import do_force_green_wave, do_force_semaphore
+          from common.monitoring_commands import do_system_status, do_health_check
+          from common.monitoring_commands import format_intersection_response
+          from common.monitoring_commands import format_history_response
+          from common.monitoring_commands import format_system_status_response
+          from common.config_loader import get_config
+          from common.models import SemaphoreCommand, SemaphoreState
+          from common.models import MonitoringQuery, MonitoringResponse
+          print('PC2 imports OK')
+          "
+
+      - name: Validate PC3 imports
+        run: |
+          docker exec pc3-monitoring python -c "
+          from pc3.monitoring_service import main, run_monitoring_cli
+          from pc3.db_primary import main, process_envelope
+          from pc3.start_pc3 import main
+          from common.monitoring_commands import MENU, send_query
+          from common.monitoring_commands import do_query_intersection, do_system_status
+          from common.config_loader import get_config
+          from common.constants import HEALTH_CHECK_MSG, HEALTH_CHECK_RESPONSE
+          from common.models import MonitoringQuery, MonitoringResponse
+          from common.db_utils import TrafficDB
+          print('PC3 imports OK')
+          "
+
+      - name: Verify no cross-PC imports exist in PC2 image
+        run: |
+          # PC2 should NOT have pc3/ module available
+          docker exec pc2-analytics python -c "
+          import importlib
+          try:
+              importlib.import_module('pc3')
+              print('FAIL: pc3 module should NOT exist in PC2 container')
+              exit(1)
+          except ModuleNotFoundError:
+              print('PASS: pc3 module correctly absent from PC2 container')
+
+          try:
+              importlib.import_module('pc1')
+              print('FAIL: pc1 module should NOT exist in PC2 container')
+              exit(1)
+          except ModuleNotFoundError:
+              print('PASS: pc1 module correctly absent from PC2 container')
+          "
+
+      - name: Verify no cross-PC imports exist in PC3 image
+        run: |
+          docker exec pc3-monitoring python -c "
+          import importlib
+          try:
+              importlib.import_module('pc2')
+              print('FAIL: pc2 module should NOT exist in PC3 container')
+              exit(1)
+          except ModuleNotFoundError:
+              print('PASS: pc2 module correctly absent from PC3 container')
+
+          try:
+              importlib.import_module('pc1')
+              print('FAIL: pc1 module should NOT exist in PC3 container')
+              exit(1)
+          except ModuleNotFoundError:
+              print('PASS: pc1 module correctly absent from PC3 container')
+          "
+
+      - name: Teardown
+        if: always()
+        run: docker compose down -v
