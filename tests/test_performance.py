@@ -361,3 +361,132 @@ class TestGraphGeneration:
         loaded = load_results(str(results_file))
         assert len(loaded) == 4
         assert loaded[0]["scenario"] == "1A"
+
+
+# =============================================================================
+# Test Area 3: created_at Backward Compatibility
+# =============================================================================
+
+
+class TestCreatedAtBackwardCompat:
+    """Tests for SemaphoreCommand deserialization without created_at field."""
+
+    def test_from_dict_without_created_at(self):
+        """Deserializing a dict without created_at should default to time.time()."""
+        data = {
+            "interseccion": "INT-A1",
+            "new_state": "GREEN",
+            "reason": "test",
+            "timestamp": "2026-01-01T10:00:00Z",
+        }
+        before = time.time()
+        cmd = SemaphoreCommand.from_dict(data)
+        after = time.time()
+
+        assert isinstance(cmd.created_at, float)
+        assert before <= cmd.created_at <= after
+        assert cmd.interseccion == "INT-A1"
+        assert cmd.new_state == "GREEN"
+
+    def test_from_dict_with_created_at(self):
+        """Deserializing a dict with created_at should use the provided value."""
+        data = {
+            "interseccion": "INT-B2",
+            "new_state": "RED",
+            "created_at": 1234567890.5,
+            "timestamp": "2026-01-01T10:00:00Z",
+        }
+        cmd = SemaphoreCommand.from_dict(data)
+        assert cmd.created_at == 1234567890.5
+
+    def test_from_dict_with_created_at_zero(self):
+        """Deserializing with created_at=0 should preserve the zero value."""
+        data = {
+            "interseccion": "INT-C3",
+            "new_state": "GREEN",
+            "created_at": 0.0,
+            "timestamp": "2026-01-01T10:00:00Z",
+        }
+        cmd = SemaphoreCommand.from_dict(data)
+        assert cmd.created_at == 0.0
+
+
+# =============================================================================
+# Test Area 5: Launcher Argument Parsing
+# =============================================================================
+
+
+class TestLauncherArgParsing:
+    """Tests for start_pc1/pc2/pc3 parse_args() functions."""
+
+    def test_start_pc1_broker_mode_default(self):
+        """Default broker mode should be 'standard'."""
+        from pc1.start_pc1 import parse_args
+
+        with patch.dict(os.environ, {}, clear=False):
+            env = os.environ.copy()
+            env.pop("BROKER_MODE", None)
+            with patch.dict(os.environ, env, clear=True):
+                args = parse_args([])
+                assert args.broker_mode == "standard"
+
+    def test_start_pc1_broker_mode_cli(self):
+        """--broker-mode threaded should set broker_mode."""
+        from pc1.start_pc1 import parse_args
+
+        args = parse_args(["--broker-mode", "threaded"])
+        assert args.broker_mode == "threaded"
+
+    def test_start_pc1_interval_cli(self):
+        """--interval 5 should set interval to 5.0."""
+        from pc1.start_pc1 import parse_args
+
+        args = parse_args(["--interval", "5"])
+        assert args.interval == 5.0
+
+    def test_start_pc1_interval_default_zero(self):
+        """Default interval should be 0 (use config defaults)."""
+        from pc1.start_pc1 import parse_args
+
+        with patch.dict(os.environ, {}, clear=False):
+            env = os.environ.copy()
+            env.pop("SENSOR_INTERVAL", None)
+            with patch.dict(os.environ, env, clear=True):
+                args = parse_args([])
+                assert args.interval == 0.0
+
+    def test_start_pc2_replica_db_path_default(self):
+        """Default replica-db-path should be /data/traffic_replica.db."""
+        from pc2.start_pc2 import parse_args
+
+        with patch.dict(os.environ, {}, clear=False):
+            env = os.environ.copy()
+            env.pop("REPLICA_DB_PATH", None)
+            with patch.dict(os.environ, env, clear=True):
+                args = parse_args([])
+                assert args.replica_db_path == "/data/traffic_replica.db"
+
+    def test_start_pc2_replica_db_path_cli(self):
+        """--replica-db-path should override the default."""
+        from pc2.start_pc2 import parse_args
+
+        args = parse_args(["--replica-db-path", "./my_replica.db"])
+        assert args.replica_db_path == "./my_replica.db"
+
+    def test_start_pc3_db_path_default(self):
+        """Default db-path should be /data/traffic_primary.db."""
+        from pc3.start_pc3 import parse_args
+
+        with patch.dict(os.environ, {}, clear=False):
+            env = os.environ.copy()
+            env.pop("PRIMARY_DB_PATH", None)
+            with patch.dict(os.environ, env, clear=True):
+                args = parse_args([])
+                assert args.db_path == "/data/traffic_primary.db"
+
+    def test_start_pc3_db_path_cli(self):
+        """--db-path should override the default."""
+        from pc3.start_pc3 import parse_args
+
+        args = parse_args(["--db-path", "./my_primary.db"])
+        assert args.db_path == "./my_primary.db"

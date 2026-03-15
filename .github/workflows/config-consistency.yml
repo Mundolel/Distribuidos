@@ -1,0 +1,168 @@
+name: Config Consistency Check
+
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+    branches: [develop, main]
+
+jobs:
+  config-check:
+    name: Validate Config Consistency
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate city_config.json structure and consistency
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -c "
+          import json
+          import re
+          import sys
+
+          # Load config
+          with open('config/city_config.json') as f:
+              config = json.load(f)
+
+          errors = []
+
+          # --- Grid validation ---
+          rows = config['city']['grid']['rows']
+          cols = config['city']['grid']['columns']
+          expected_intersections = [f'INT-{r}{c}' for r in rows for c in cols]
+          print(f'Grid: {len(rows)}x{len(cols)} = {len(expected_intersections)} intersections')
+
+          # --- Intersection ID format ---
+          pattern = re.compile(r'^INT-[A-Z]\d+$')
+          for iid in expected_intersections:
+              if not pattern.match(iid):
+                  errors.append(f'Invalid intersection ID format: {iid}')
+
+          # --- Sensor validation ---
+          sensor_types = {
+              'cameras': 'CAM-',
+              'inductive_loops': 'ESP-',
+              'gps': 'GPS-',
+          }
+          total_sensors = 0
+          for sensor_type, prefix in sensor_types.items():
+              sensors = config['sensors'][sensor_type]
+              total_sensors += len(sensors)
+              for s in sensors:
+                  sid = s['sensor_id']
+                  inter = s['interseccion']
+                  if not sid.startswith(prefix):
+                      errors.append(f'Sensor {sid} should start with {prefix}')
+                  if inter not in expected_intersections:
+                      errors.append(f'Sensor {sid} at unknown intersection {inter}')
+          print(f'Sensors: {total_sensors} total ({len(config[\"sensors\"][\"cameras\"])} cameras, '
+                f'{len(config[\"sensors\"][\"inductive_loops\"])} inductive, '
+                f'{len(config[\"sensors\"][\"gps\"])} GPS)')
+
+          # --- ZMQ ports validation ---
+          required_ports = [
+              'sensor_camera_pub', 'sensor_inductive_pub', 'sensor_gps_pub',
+              'broker_pub', 'analytics_rep', 'semaphore_control_pull',
+              'db_primary_pull', 'db_replica_pull', 'health_check_rep',
+          ]
+          ports = config['zmq_ports']
+          for port_name in required_ports:
+              if port_name not in ports:
+                  errors.append(f'Missing required ZMQ port: {port_name}')
+              elif not isinstance(ports[port_name], int):
+                  errors.append(f'Port {port_name} must be an integer, got {type(ports[port_name])}')
+
+          # Check for port conflicts
+          port_values = list(ports.values())
+          if len(port_values) != len(set(port_values)):
+              seen = {}
+              for name, port in ports.items():
+                  if port in seen:
+                      errors.append(f'Port conflict: {name} and {seen[port]} both use port {port}')
+                  seen[port] = name
+          print(f'ZMQ ports: {len(ports)} configured, range {min(port_values)}-{max(port_values)}')
+
+          # --- Network hosts validation ---
+          required_hosts = ['pc1_host', 'pc2_host', 'pc3_host']
+          network = config['network']
+          for host_key in required_hosts:
+              if host_key not in network:
+                  errors.append(f'Missing network host: {host_key}')
+          print(f'Network hosts: {network.get(\"pc1_host\")}, {network.get(\"pc2_host\")}, {network.get(\"pc3_host\")}')
+
+          # --- Semaphores validation ---
+          semaphores = config['semaphores']['list']
+          for sem in semaphores:
+              if sem not in expected_intersections:
+                  errors.append(f'Semaphore {sem} is not a valid intersection')
+          print(f'Semaphores: {len(semaphores)} configured')
+
+          # --- Timings validation ---
+          required_timings = [
+              'normal_cycle_sec', 'congestion_extension_sec',
+              'green_wave_duration_sec', 'sensor_default_interval_sec',
+              'inductive_interval_sec', 'health_check_interval_sec',
+              'health_check_timeout_ms', 'health_check_max_retries',
+          ]
+          for timing in required_timings:
+              if timing not in config['timings']:
+                  errors.append(f'Missing required timing: {timing}')
+              elif not isinstance(config['timings'][timing], int):
+                  errors.append(f'Timing {timing} must be an integer')
+          print(f'Timings: {len(config[\"timings\"])} parameters configured')
+
+          # --- Report ---
+          if errors:
+              print(f'\nFAILED: {len(errors)} error(s) found:')
+              for e in errors:
+                  print(f'  - {e}')
+              sys.exit(1)
+          else:
+              print('\nAll config consistency checks passed.')
+          "
+
+      - name: Verify docker-compose service names match config network hosts
+        run: |
+          python -c "
+          import json
+          import re
+          import sys
+
+          # Load config
+          with open('config/city_config.json') as f:
+              config = json.load(f)
+
+          # Parse docker-compose service names
+          with open('docker-compose.yml') as f:
+              compose_content = f.read()
+
+          network = config['network']
+          errors = []
+
+          # Check that each host in config appears as a service in docker-compose
+          for host_key in ['pc1_host', 'pc2_host', 'pc3_host']:
+              host = network[host_key]
+              # Service names in docker-compose appear as top-level keys under 'services:'
+              pattern = rf'^\s+{re.escape(host)}:'
+              if not re.search(pattern, compose_content, re.MULTILINE):
+                  errors.append(
+                      f'Config network host \"{host}\" ({host_key}) not found '
+                      f'as a service in docker-compose.yml'
+                  )
+
+          if errors:
+              print(f'FAILED: {len(errors)} error(s):')
+              for e in errors:
+                  print(f'  - {e}')
+              sys.exit(1)
+          else:
+              print('Docker Compose service names match config network hosts.')
+          "

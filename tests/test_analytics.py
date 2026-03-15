@@ -686,3 +686,70 @@ class TestAnalyticsZMQIntegration:
         rep.close()
         req.close()
         context.term()
+
+
+# =============================================================================
+# Test Area 8: Green Wave DB Persistence
+# =============================================================================
+
+
+class TestGreenWaveDBPersistence:
+    """Tests for green wave priority action DB records."""
+
+    def _make_db(self):
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        return TrafficDB(path)
+
+    def test_priority_action_persists_to_db(self):
+        """A priority_action envelope should be insertable and queryable."""
+        db = self._make_db()
+        try:
+            db.insert_priority_action(
+                action_type="GREEN_WAVE",
+                target="row_A",
+                reason="ambulance",
+                requested_by="user",
+                affected_intersections=["INT-A1", "INT-A2", "INT-A3", "INT-A4"],
+                timestamp="2026-01-15T08:30:00Z",
+            )
+            summary = db.get_system_summary()
+            assert summary["total_green_waves"] >= 1
+        finally:
+            db.close()
+
+    def test_semaphore_state_change_persists(self):
+        """Semaphore state changes should be recorded in DB."""
+        db = self._make_db()
+        try:
+            db.insert_semaphore_state(
+                interseccion="INT-B3",
+                state_ns=SEMAPHORE_GREEN,
+                state_ew=SEMAPHORE_RED,
+                reason="congestion",
+                cycle_duration_sec=25,
+                timestamp="2026-01-15T08:31:00Z",
+            )
+            summary = db.get_system_summary()
+            assert summary["total_semaphore_changes"] >= 1
+        finally:
+            db.close()
+
+    def test_congestion_record_persists_with_extend_green(self):
+        """Congestion records with EXTEND_GREEN decision should be queryable."""
+        db = self._make_db()
+        try:
+            db.insert_congestion_record(
+                interseccion="INT-C2",
+                traffic_state="CONGESTION",
+                decision=DECISION_EXTEND_GREEN,
+                details="Q=12, Vp=18, D=45",
+                sensor_data={"Q": 12, "Vp": 18, "D": 45},
+                timestamp="2026-01-15T09:00:00Z",
+            )
+            records = db.query_congestion_history(interseccion="INT-C2")
+            assert len(records) == 1
+            assert records[0]["decision"] == DECISION_EXTEND_GREEN
+            assert records[0]["traffic_state"] == "CONGESTION"
+        finally:
+            db.close()
