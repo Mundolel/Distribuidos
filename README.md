@@ -2,7 +2,6 @@
 
 A distributed platform for intelligent urban traffic management, built with **Python** and **ZeroMQ**. The system simulates a city grid with smart sensors, real-time analytics, automated semaphore control, and a monitoring interface -- all running across three networked machines communicating via asynchronous messaging patterns.
 
-> **Course:** Introduction to Distributed Systems -- Pontificia Universidad Javeriana, 2026-10
 
 ---
 
