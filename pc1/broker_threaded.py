@@ -212,5 +212,9 @@ def run_broker_threaded() -> None:
         logger.info("Threaded broker shut down.")
 
 
-if __name__ == "__main__":
+def main(argv: list[str] | None = None) -> None:
     run_broker_threaded()
+
+
+if __name__ == "__main__":
+    main()
