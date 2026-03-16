@@ -173,12 +173,14 @@ $env:PYTHONPATH = (Get-Location).Path
 python pc1/start_pc1.py
 # Options: --broker-mode standard|threaded  (default: standard, env: BROKER_MODE)
 #          --interval N                     (seconds, 0 = use config defaults, env: SENSOR_INTERVAL)
+#          --sensor-count N                 (sensors per type, 0 = all from config, env: SENSOR_COUNT)
 
 # Or start individual components:
 python -m pc1.broker --mode standard
-python -m pc1.sensors.camera_sensor --all --interval 10
-python -m pc1.sensors.inductive_sensor --all --interval 30
-python -m pc1.sensors.gps_sensor --all --interval 10
+python -m pc1.sensors.camera_sensor --all --interval 10 --count 2
+python -m pc1.sensors.inductive_sensor --all --interval 30 --count 2
+python -m pc1.sensors.gps_sensor --all --interval 10 --count 2
+# --count N: launch only the first N sensors of that type (0 or omit = all)
 
 # 4. Start PC2 (analytics + semaphore control + replica DB)
 # Note: --replica-db-path defaults to /data/traffic_replica.db (Docker path).
