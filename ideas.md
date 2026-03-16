@@ -241,7 +241,7 @@ completely dormant.
   is publishing there, the socket sits idle with zero CPU/memory overhead.
 - The analytics `elif topic == TOPIC_PREDICTION:` branch never fires because
   no prediction events arrive through the pipeline.
-- All 117+ existing tests continue to pass — the new topic is simply unused.
+- All 167 existing tests continue to pass — the new topic is simply unused.
 
 ### ML Algorithm: Linear Regression on Sliding Window
 
@@ -334,7 +334,7 @@ University VM:                          Your PC (development):
 
 - Phase 7 (Performance Testing) complete
 - Phase 8 (Documentation) complete
-- All 117+ tests passing
+- All 167 tests passing
 - Docker integration verified
 
 Enhancement 1 (GUI) can be implemented independently of Enhancement 2 (ESP32).
