@@ -1,0 +1,18 @@
+[run]
+source = common,pc1,pc2,pc3
+omit =
+    */start_pc*.py
+    */__main__.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    def main
+    pass
+
+show_missing = true
+precision = 1
+
+[html]
+directory = coverage_html

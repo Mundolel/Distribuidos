@@ -1,0 +1,59 @@
+name: Test Coverage Report
+
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+    branches: [develop, main]
+
+jobs:
+  coverage:
+    name: Run Tests with Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt pytest-cov
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ -v --tb=short \
+            --cov=common --cov=pc1 --cov=pc2 --cov=pc3 \
+            --cov-report=term-missing \
+            --cov-report=html:coverage_html \
+            --cov-config=.coveragerc
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
+      - name: Display coverage summary
+        run: |
+          echo "=== Coverage Summary ==="
+          pytest tests/ -q \
+            --cov=common --cov=pc1 --cov=pc2 --cov=pc3 \
+            --cov-report=term \
+            --cov-config=.coveragerc 2>/dev/null | tail -20
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
+      - name: Upload coverage HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage_html/
+          retention-days: 14

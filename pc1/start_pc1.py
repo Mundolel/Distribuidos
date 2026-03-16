@@ -98,6 +98,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=float(os.environ.get("SENSOR_INTERVAL", "0")),
         help="Sensor interval override in seconds (0 = use config default)",
     )
+    parser.add_argument(
+        "--sensor-count",
+        type=int,
+        default=int(os.environ.get("SENSOR_COUNT", "0")),
+        help="Number of sensors per type (0 = all from config, env: SENSOR_COUNT)",
+    )
     return parser.parse_args(argv)
 
 
@@ -108,6 +114,10 @@ def main(argv: list[str] | None = None) -> None:
     logger.info("=" * 60)
     logger.info("PC1 LAUNCHER - Sensors & Broker")
     logger.info("Broker mode: %s", args.broker_mode)
+    logger.info(
+        "Sensor count: %s per type",
+        args.sensor_count if args.sensor_count > 0 else "all",
+    )
     logger.info("=" * 60)
 
     # 1. Start broker first
@@ -122,16 +132,27 @@ def main(argv: list[str] | None = None) -> None:
     if args.interval > 0:
         interval_args = ["--interval", str(args.interval)]
 
+    count_args = []
+    if args.sensor_count > 0:
+        count_args = ["--count", str(args.sensor_count)]
+
     # Camera sensors
-    camera_cmd = [python, "-m", "pc1.sensors.camera_sensor", "--all", *interval_args]
+    camera_cmd = [python, "-m", "pc1.sensors.camera_sensor", "--all", *interval_args, *count_args]
     _launch(camera_cmd, "Camera Sensors")
 
     # Inductive loop sensors
-    inductive_cmd = [python, "-m", "pc1.sensors.inductive_sensor", "--all", *interval_args]
+    inductive_cmd = [
+        python,
+        "-m",
+        "pc1.sensors.inductive_sensor",
+        "--all",
+        *interval_args,
+        *count_args,
+    ]
     _launch(inductive_cmd, "Inductive Sensors")
 
     # GPS sensors
-    gps_cmd = [python, "-m", "pc1.sensors.gps_sensor", "--all", *interval_args]
+    gps_cmd = [python, "-m", "pc1.sensors.gps_sensor", "--all", *interval_args, *count_args]
     _launch(gps_cmd, "GPS Sensors")
 
     logger.info("All PC1 processes launched (%d total).", len(_processes))

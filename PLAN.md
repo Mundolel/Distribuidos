@@ -66,12 +66,18 @@ distribuidos/
 ├── phase4_plan.md                # Phase 4 design decisions
 ├── phase5_plan.md                # Phase 5 design decisions
 ├── README.md                     # Project readme with usage instructions
+├── ideas.md                      # Post-project enhancement ideas (GUI, ESP32)
+├── perf/
+│   ├── __init__.py
+│   ├── run_scenarios.py          # Performance test scenario runner (Docker-based)
+│   └── generate_graphs.py        # Matplotlib chart generation from results
 └── tests/
     ├── test_common.py            # 25 tests - models, config, DB utils
     ├── test_sensors.py           # 19 tests - sensor event generation
     ├── test_analytics.py         # 32 tests - analytics, rules, semaphore control
     ├── test_monitoring.py        # 26 tests - DB primary, monitoring CLI, health check
-    └── test_failover.py          # 15 tests - failover state, health checker, recovery
+    ├── test_failover.py          # 15 tests - failover state, health checker, recovery
+    └── test_performance.py       # 18 tests - latency instrumentation, sensor count, graphs
 ```
 
 ---
@@ -364,13 +370,15 @@ volumes:
 
 ---
 
-### PHASE 7: Performance Testing & Comparison (Days 13-15)
+### PHASE 7: Performance Testing & Comparison (Days 13-15) ✅ COMPLETED
 
 #### Step 7.1 - Instrumentation
-- [ ] Add timestamps to measure:
-  - **Throughput**: Count DB inserts in a 2-minute window
-  - **Latency**: Time from user command to semaphore state change
-- [ ] Use Python `time.perf_counter()` for precision
+- [x] Sensor count control: `--sensor-count N` in `start_pc1.py` + `--count N` in each sensor script
+  - `SENSOR_COUNT` env var in `docker-compose.yml`
+  - Slices config lists to first N sensors per type
+- [x] Latency instrumentation: `created_at: float` field on `SemaphoreCommand` (wall-clock `time.time()`)
+  - `traffic_light_control.py` computes and logs `[LATENCY] INT-XX: N.NN ms` on every state change
+- [x] Throughput: `get_event_count_in_interval()` already in `db_utils.py`
 
 #### Step 7.2 - Run experiments (Table 1 from project spec)
 
@@ -381,18 +389,19 @@ volumes:
 | 2A | 2 of each type (6 total) | 5s | Standard broker |
 | 2B | 2 of each type (6 total) | 5s | Multithreaded broker |
 
-**Variables to measure (dependent):**
-- Cantidad de solicitudes almacenadas en la BD en un intervalo de 2 minutos
-- Tiempo desde que el usuario solicita una accion hasta que el semaforo cambia
-
-**Variables independientes (factors):**
-- Numero de sensores generando informacion
-- Tiempo entre generacion de mediciones
+- [x] `perf/run_scenarios.py`: automated scenario runner using Docker Compose
+  - Runs each scenario for configurable duration (default 2 min)
+  - Collects throughput via `docker exec` into replica DB
+  - Collects latency by parsing `[LATENCY]` log lines
+  - Saves results to `benchmark_results/results.json`
 
 #### Step 7.3 - Collect & analyze
-- [ ] Record results in tables
-- [ ] Create graphs (matplotlib or export CSV)
-- [ ] Analyze: which design scales better and why
+- [x] `perf/generate_graphs.py`: matplotlib chart generation
+  - Throughput grouped bar chart (standard vs threaded, by sensor count)
+  - Latency grouped bar chart (with min/max error bars)
+  - Per-scenario throughput and latency charts
+  - Output to `benchmark_results/graphs/`
+- [x] 18 new unit tests in `tests/test_performance.py` (133 passed + 2 skipped without matplotlib)
 
 ---
 

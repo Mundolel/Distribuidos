@@ -31,6 +31,7 @@ Usage:
 import json
 import logging
 import signal
+import time
 
 import zmq
 
@@ -153,6 +154,11 @@ def apply_command(
         cycle_duration_sec=cycle_sec,
     )
     states[intersection] = new_state
+
+    # Latency measurement (cross-process wall-clock comparison)
+    if command.created_at:
+        latency_ms = (time.time() - command.created_at) * 1000
+        logger.info("[LATENCY] %s: %.2f ms", intersection, latency_ms)
 
     # Log the change
     logger.info(

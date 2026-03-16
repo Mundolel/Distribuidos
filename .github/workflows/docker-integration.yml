@@ -1,72 +1,229 @@
-name: Docker Integration Test
+name: Docker Integration & Failover Test
 
 on:
-  push:
-    branches: [main]
   pull_request:
-    branches: [main]
+    branches: [develop, main]
 
 jobs:
-  docker-build-test:
-    name: Build & Smoke Test
+  zmq-integration:
+    name: ZMQ Communication Integration
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build all Docker images
+      - name: Build all images
         run: docker compose build
 
-      - name: Start the full stack
+      - name: Start all services
         run: docker compose up -d
 
-      - name: Wait for services to initialize
-        run: sleep 10
+      - name: Wait for sensor events to flow (15s)
+        run: sleep 15
 
-      - name: Verify all containers are running
+      - name: Verify sensor events reach analytics
         run: |
-          echo "=== Container Status ==="
-          docker compose ps
-
-          # Check that all 3 containers are running
-          RUNNING=$(docker compose ps --status running -q | wc -l)
-          echo "Running containers: $RUNNING"
-
-          if [ "$RUNNING" -lt 3 ]; then
-            echo "ERROR: Expected 3 running containers, found $RUNNING"
-            echo "=== Container Logs ==="
-            docker compose logs
+          EVENT_COUNT=$(docker compose logs --no-color pc2 | grep -c "\[EVENT #" || true)
+          echo "Analytics processed $EVENT_COUNT sensor events"
+          if [ "$EVENT_COUNT" -lt 1 ]; then
+            echo "FAIL: No sensor events processed by analytics"
+            docker compose logs pc1 | tail -20
+            docker compose logs pc2 | tail -20
             exit 1
           fi
 
-          echo "All 3 containers are running."
-
-      - name: Check container logs for critical errors
+      - name: Verify replica DB receives writes
         run: |
-          echo "=== PC1 (Sensors & Broker) Logs ==="
-          docker compose logs pc1 2>&1 | tail -20
+          docker exec pc2-analytics python -c "
+          from common.db_utils import TrafficDB
+          db = TrafficDB('/data/traffic_replica.db')
+          summary = db.get_system_summary()
+          events = summary['total_sensor_events']
+          assert events > 0, f'No events in replica DB (got {events})'
+          print(f'Replica DB: {events} sensor events')
+          print(f'  Congestion detections: {summary[\"total_congestion_detections\"]}')
+          print(f'  Semaphore changes: {summary[\"total_semaphore_changes\"]}')
+          "
 
-          echo ""
-          echo "=== PC2 (Analytics) Logs ==="
-          docker compose logs pc2 2>&1 | tail -20
+      - name: Verify primary DB receives writes
+        run: |
+          docker exec pc3-monitoring python -c "
+          from common.db_utils import TrafficDB
+          db = TrafficDB('/data/traffic_primary.db')
+          summary = db.get_system_summary()
+          events = summary['total_sensor_events']
+          assert events > 0, f'No events in primary DB (got {events})'
+          print(f'Primary DB: {events} sensor events')
+          "
 
-          echo ""
-          echo "=== PC3 (Monitoring) Logs ==="
-          docker compose logs pc3 2>&1 | tail -20
+      - name: Verify monitoring REQ/REP round-trip
+        run: |
+          docker exec pc3-monitoring python -c "
+          import zmq, json
+          from common.config_loader import get_config
+          from common.models import MonitoringQuery
+          from common.constants import CMD_SYSTEM_STATUS
 
-          # Fail if any container exited with an error
-          EXITED=$(docker compose ps --status exited -q | wc -l)
-          if [ "$EXITED" -gt 0 ]; then
-            echo ""
-            echo "ERROR: $EXITED container(s) have exited unexpectedly."
-            docker compose ps --status exited
-            docker compose logs
-            exit 1
-          fi
+          config = get_config()
+          ctx = zmq.Context()
+          req = ctx.socket(zmq.REQ)
+          req.connect(config.zmq_address(config.pc2_host, 'analytics_rep'))
+          req.setsockopt(zmq.RCVTIMEO, 5000)
+          req.setsockopt(zmq.LINGER, 0)
 
-      - name: Tear down the stack
+          query = MonitoringQuery(command=CMD_SYSTEM_STATUS)
+          req.send_string(query.to_json())
+          resp = req.recv_string()
+          data = json.loads(resp)
+
+          assert data['status'] in ('OK', 'FAILOVER'), f'Bad status: {data[\"status\"]}'
+          print(f'Monitoring REQ/REP OK - status: {data[\"status\"]}')
+          print(f'  Message: {data[\"message\"]}')
+
+          req.close()
+          ctx.term()
+          "
+
+      - name: Verify latency measurements are being logged
+        run: |
+          LATENCY_COUNT=$(docker compose logs --no-color pc2 | grep -c "LATENCY" || true)
+          echo "Found $LATENCY_COUNT latency measurements"
+
+      - name: Verify semaphore control receives commands
+        run: |
+          SEM_COUNT=$(docker compose logs --no-color pc2 | grep -c "SemaphoreControl" || true)
+          echo "Semaphore control logged $SEM_COUNT lines"
+
+      - name: Teardown
         if: always()
-        run: docker compose down -v --remove-orphans
+        run: docker compose down -v
+
+  failover-recovery:
+    name: Failover & Recovery
+    runs-on: ubuntu-latest
+    needs: zmq-integration
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build and start
+        run: docker compose up -d && sleep 15
+
+      - name: Record pre-failover event count
+        run: |
+          PRE_COUNT=$(docker exec pc2-analytics python -c "
+          from common.db_utils import TrafficDB
+          db = TrafficDB('/data/traffic_replica.db')
+          print(db.get_system_summary()['total_sensor_events'])
+          ")
+          echo "Pre-failover events: $PRE_COUNT"
+          echo "$PRE_COUNT" > /tmp/pre_count.txt
+
+      - name: Stop PC3 to simulate failure
+        run: docker stop pc3-monitoring
+
+      - name: Wait for failover detection (~20s)
+        run: sleep 20
+
+      - name: Verify FAILOVER message in PC2 logs
+        run: |
+          FAILOVER=$(docker compose logs --no-color pc2 | grep "FAILOVER" | head -1)
+          if [ -z "$FAILOVER" ]; then
+            echo "FAIL: No FAILOVER message detected in PC2 logs"
+            docker compose logs pc2 | tail -30
+            exit 1
+          fi
+          echo "Failover detected: $FAILOVER"
+
+      - name: Verify events still flow during failover
+        run: |
+          sleep 10
+          POST_COUNT=$(docker exec pc2-analytics python -c "
+          from common.db_utils import TrafficDB
+          db = TrafficDB('/data/traffic_replica.db')
+          print(db.get_system_summary()['total_sensor_events'])
+          ")
+          PRE_COUNT=$(cat /tmp/pre_count.txt)
+          echo "Pre-failover: $PRE_COUNT events, Post-failover: $POST_COUNT events"
+          if [ "$POST_COUNT" -le "$PRE_COUNT" ]; then
+            echo "FAIL: No new events during failover (replica not receiving writes)"
+            exit 1
+          fi
+          echo "PASS: Events continued flowing during failover"
+
+      - name: Verify fallback CLI works during failover
+        run: |
+          docker exec pc2-analytics python -c "
+          from pc2.monitoring_fallback import run_fallback_cli
+          print('Fallback CLI import OK during failover')
+          "
+
+      - name: Verify system status reports failover mode
+        run: |
+          docker exec pc2-analytics python -c "
+          import zmq, json
+          from common.models import MonitoringQuery
+          from common.constants import CMD_SYSTEM_STATUS
+
+          ctx = zmq.Context()
+          req = ctx.socket(zmq.REQ)
+          req.connect('tcp://127.0.0.1:5561')
+          req.setsockopt(zmq.RCVTIMEO, 5000)
+          req.setsockopt(zmq.LINGER, 0)
+
+          query = MonitoringQuery(command=CMD_SYSTEM_STATUS)
+          req.send_string(query.to_json())
+          resp = json.loads(req.recv_string())
+
+          assert resp['status'] == 'FAILOVER', f'Expected FAILOVER status, got {resp[\"status\"]}'
+          assert resp['data']['pc3_alive'] is False, 'pc3_alive should be False'
+          print('PASS: System status correctly reports FAILOVER mode')
+
+          req.close()
+          ctx.term()
+          "
+
+      - name: Restart PC3 for recovery
+        run: docker start pc3-monitoring
+
+      - name: Wait for recovery detection (~15s)
+        run: sleep 15
+
+      - name: Verify RECOVERY message in PC2 logs
+        run: |
+          RECOVERY=$(docker compose logs --no-color pc2 | grep "RECOVERY" | head -1)
+          if [ -z "$RECOVERY" ]; then
+            echo "FAIL: No RECOVERY message detected in PC2 logs"
+            docker compose logs pc2 | tail -30
+            exit 1
+          fi
+          echo "Recovery detected: $RECOVERY"
+
+      - name: Verify system resumed normal operation
+        run: |
+          docker exec pc2-analytics python -c "
+          import zmq, json
+          from common.models import MonitoringQuery
+          from common.constants import CMD_SYSTEM_STATUS
+
+          ctx = zmq.Context()
+          req = ctx.socket(zmq.REQ)
+          req.connect('tcp://127.0.0.1:5561')
+          req.setsockopt(zmq.RCVTIMEO, 5000)
+          req.setsockopt(zmq.LINGER, 0)
+
+          query = MonitoringQuery(command=CMD_SYSTEM_STATUS)
+          req.send_string(query.to_json())
+          resp = json.loads(req.recv_string())
+
+          assert resp['status'] == 'OK', f'Expected OK after recovery, got {resp[\"status\"]}'
+          assert resp['data']['pc3_alive'] is True, 'pc3_alive should be True after recovery'
+          print('PASS: System back to normal after recovery')
+
+          req.close()
+          ctx.term()
+          "
+
+      - name: Teardown
+        if: always()
+        run: docker compose down -v

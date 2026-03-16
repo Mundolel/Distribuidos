@@ -171,6 +171,7 @@ class TestCityConfig:
     def test_semaphores_count(self):
         config = CityConfig()
         assert len(config.semaphores) == 16
+        assert config.semaphores == config.intersections
 
     def test_zmq_address_builder(self):
         config = CityConfig()
@@ -291,5 +292,92 @@ class TestTrafficDB:
 
             count = db.get_event_count_in_interval("2026-01-01T10:00:00Z", "2026-01-01T10:04:00Z")
             assert count == 5
+        finally:
+            db.close()
+
+
+# =============================================================================
+# Test Area 2: Config Validation / Edge Cases
+# =============================================================================
+
+
+class TestConfigValidation:
+    """Tests for config_loader.py edge cases."""
+
+    def test_config_missing_file_raises_error(self):
+        """Loading a nonexistent config file should raise FileNotFoundError."""
+        import pytest
+
+        from common.config_loader import CityConfig
+
+        with pytest.raises(FileNotFoundError):
+            CityConfig("/nonexistent/path/config.json")
+
+    def test_get_port_invalid_name_raises_keyerror(self):
+        """get_port with unknown name should raise KeyError."""
+        import pytest
+
+        config = CityConfig()
+        with pytest.raises(KeyError):
+            config.get_port("nonexistent_port_name")
+
+    def test_zmq_address_format(self):
+        """zmq_address should produce correct tcp:// format."""
+        config = CityConfig()
+        addr = config.zmq_address("myhost", "broker_pub")
+        assert addr.startswith("tcp://myhost:")
+        assert "5560" in addr
+
+    def test_zmq_bind_address_format(self):
+        """zmq_bind_address should produce tcp://*: format."""
+        config = CityConfig()
+        addr = config.zmq_bind_address("broker_pub")
+        assert addr.startswith("tcp://*:")
+        assert "5560" in addr
+
+
+# =============================================================================
+# Test Area 6: DB Edge Cases
+# =============================================================================
+
+
+class TestDBEdgeCases:
+    """Tests for db_utils.py edge cases."""
+
+    def _make_db(self) -> TrafficDB:
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        return TrafficDB(path)
+
+    def test_event_count_empty_range(self):
+        """Equal start and end should return 0 or events at that exact time."""
+        db = self._make_db()
+        try:
+            db.insert_sensor_event("CAM-A1", "camara", "INT-A1", {}, "2026-01-01T10:00:00Z")
+            count = db.get_event_count_in_interval("2026-01-01T10:00:00Z", "2026-01-01T10:00:00Z")
+            # Should not crash; result depends on SQL BETWEEN semantics (inclusive)
+            assert isinstance(count, int)
+            assert count >= 0
+        finally:
+            db.close()
+
+    def test_event_count_no_events_in_range(self):
+        """Time range with no data should return 0."""
+        db = self._make_db()
+        try:
+            count = db.get_event_count_in_interval("2099-01-01T00:00:00Z", "2099-12-31T23:59:59Z")
+            assert count == 0
+        finally:
+            db.close()
+
+    def test_event_count_with_different_sensors(self):
+        """Count should include events from all sensor types."""
+        db = self._make_db()
+        try:
+            db.insert_sensor_event("CAM-A1", "camara", "INT-A1", {}, "2026-06-01T12:00:00Z")
+            db.insert_sensor_event("ESP-B2", "espira", "INT-B2", {}, "2026-06-01T12:01:00Z")
+            db.insert_sensor_event("GPS-C3", "gps", "INT-C3", {}, "2026-06-01T12:02:00Z")
+            count = db.get_event_count_in_interval("2026-06-01T12:00:00Z", "2026-06-01T12:05:00Z")
+            assert count == 3
         finally:
             db.close()
