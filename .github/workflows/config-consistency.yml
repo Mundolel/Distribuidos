@@ -99,11 +99,12 @@ jobs:
           print(f'Network hosts: {network.get(\"pc1_host\")}, {network.get(\"pc2_host\")}, {network.get(\"pc3_host\")}')
 
           # --- Semaphores validation ---
-          semaphores = config['semaphores']['list']
-          for sem in semaphores:
-              if sem not in expected_intersections:
-                  errors.append(f'Semaphore {sem} is not a valid intersection')
-          print(f'Semaphores: {len(semaphores)} configured')
+          # Semaphores are 1:1 with intersections (no separate list).
+          # Validate that the semaphores section exists for documentation.
+          if 'semaphores' not in config:
+              errors.append('Missing semaphores section in config')
+          else:
+              print(f'Semaphores: {len(expected_intersections)} (one per intersection)')
 
           # --- Timings validation ---
           required_timings = [

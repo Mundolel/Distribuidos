@@ -171,6 +171,7 @@ class TestCityConfig:
     def test_semaphores_count(self):
         config = CityConfig()
         assert len(config.semaphores) == 16
+        assert config.semaphores == config.intersections
 
     def test_zmq_address_builder(self):
         config = CityConfig()

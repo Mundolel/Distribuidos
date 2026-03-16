@@ -49,14 +49,7 @@
   },
 
   "semaphores": {
-    "description": "Every intersection has a semaphore. Initial state is RED. Two directions: NS (north-south) and EW (east-west). When NS is GREEN, EW is RED and vice versa.",
-    "initial_state": "RED",
-    "list": [
-      "SEM-A1", "SEM-A2", "SEM-A3", "SEM-A4",
-      "SEM-B1", "SEM-B2", "SEM-B3", "SEM-B4",
-      "SEM-C1", "SEM-C2", "SEM-C3", "SEM-C4",
-      "SEM-D1", "SEM-D2", "SEM-D3", "SEM-D4"
-    ]
+    "description": "Every intersection has a semaphore (1:1 mapping). Semaphores are identified by their intersection ID (e.g., INT-A1). Two directions: NS (north-south) and EW (east-west). Initial state: NS=RED, EW=GREEN."
   },
 
   "rules": {
