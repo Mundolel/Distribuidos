@@ -77,13 +77,8 @@ class CityConfig:
 
     @property
     def semaphores(self) -> list[str]:
-        """All semaphore IDs."""
-        return self._config["semaphores"]["list"]
-
-    @property
-    def semaphore_initial_state(self) -> str:
-        """Initial state for all semaphores."""
-        return self._config["semaphores"]["initial_state"]
+        """Semaphore IDs (same as intersection IDs -- one semaphore per intersection)."""
+        return self.intersections
 
     # =========================================================================
     # Rules

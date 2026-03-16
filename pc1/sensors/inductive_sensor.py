@@ -167,6 +167,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=f"Measurement interval in seconds (default: {INDUCTIVE_INTERVAL_SEC})",
     )
     parser.add_argument(
+        "--count",
+        type=int,
+        default=0,
+        help="Limit to first N sensors when used with --all (0 = all)",
+    )
+    parser.add_argument(
         "--port",
         type=int,
         default=None,
@@ -182,6 +188,8 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.all:
         sensors = config.inductive_loops
+        if args.count > 0:
+            sensors = sensors[: args.count]
     elif args.sensor_id and args.intersection:
         sensors = [{"sensor_id": args.sensor_id, "interseccion": args.intersection}]
     else:

@@ -9,10 +9,12 @@ Tests:
   - ZMQ integration: REQ/REP round-trip for monitoring queries
 """
 
+import inspect
 import json
 import os
 import tempfile
 import time
+from unittest.mock import MagicMock, patch
 
 import zmq
 
@@ -27,8 +29,7 @@ from common.constants import (
 )
 from common.db_utils import TrafficDB
 from common.models import MonitoringQuery, MonitoringResponse
-from pc3.db_primary import process_envelope
-from pc3.monitoring_service import (
+from common.monitoring_commands import (
     format_green_wave_response,
     format_health_check_response,
     format_history_response,
@@ -36,6 +37,7 @@ from pc3.monitoring_service import (
     format_semaphore_response,
     format_system_status_response,
 )
+from pc3.db_primary import process_envelope
 
 # =============================================================================
 # Helpers
@@ -619,3 +621,107 @@ class TestMonitoringZMQIntegration:
         pull.close()
         push.close()
         context.term()
+
+
+# =============================================================================
+# Test Area 1: Monitoring Fallback CLI
+# =============================================================================
+
+
+class TestMonitoringFallbackCLI:
+    """Tests for pc2/monitoring_fallback.py."""
+
+    def test_fallback_imports_from_common_not_pc3(self):
+        """Fallback CLI should import from common.monitoring_commands, not pc3."""
+        source = inspect.getsource(__import__("pc2.monitoring_fallback", fromlist=["*"]))
+        assert "from common.monitoring_commands import" in source
+        assert "from pc3.monitoring_service import" not in source
+
+    def test_fallback_connects_to_localhost(self):
+        """Fallback CLI should connect to 127.0.0.1, not a Docker hostname."""
+        source = inspect.getsource(__import__("pc2.monitoring_fallback", fromlist=["*"]))
+        assert "127.0.0.1" in source
+
+    def test_fallback_eof_exits_gracefully(self):
+        """EOFError from input() should exit without crash."""
+        import contextlib
+
+        from pc2.monitoring_fallback import run_fallback_cli
+
+        with (
+            patch("builtins.input", side_effect=EOFError),
+            patch("zmq.Context"),
+            patch("common.config_loader.get_config") as mock_cfg,
+        ):
+            mock_cfg.return_value = MagicMock()
+            mock_cfg.return_value.get_port.return_value = 9999
+            with contextlib.suppress(SystemExit, EOFError):
+                run_fallback_cli()
+
+    def test_fallback_exit_option_zero(self):
+        """Option '0' should exit the menu loop."""
+        import contextlib
+
+        from pc2.monitoring_fallback import run_fallback_cli
+
+        with (
+            patch("builtins.input", return_value="0"),
+            patch("zmq.Context"),
+            patch("common.config_loader.get_config") as mock_cfg,
+        ):
+            mock_cfg.return_value = MagicMock()
+            mock_cfg.return_value.get_port.return_value = 9999
+            with contextlib.suppress(SystemExit, EOFError):
+                run_fallback_cli()
+
+
+# =============================================================================
+# Test Area 7: send_query() Error Handling
+# =============================================================================
+
+
+class TestSendQueryErrorHandling:
+    """Tests for common/monitoring_commands.send_query() error paths."""
+
+    def test_send_query_timeout_returns_none(self):
+        """send_query should return None on zmq.Again (timeout)."""
+        from common.monitoring_commands import send_query
+
+        mock_socket = MagicMock()
+        mock_socket.recv_string.side_effect = zmq.Again()
+
+        query = MonitoringQuery(command=CMD_SYSTEM_STATUS)
+        result = send_query(mock_socket, query)
+
+        assert result is None
+        mock_socket.send_string.assert_called_once()
+
+    def test_send_query_exception_returns_none(self):
+        """send_query should return None on generic Exception."""
+        from common.monitoring_commands import send_query
+
+        mock_socket = MagicMock()
+        mock_socket.send_string.side_effect = Exception("connection lost")
+
+        query = MonitoringQuery(command=CMD_SYSTEM_STATUS)
+        result = send_query(mock_socket, query)
+
+        assert result is None
+
+    def test_send_query_success(self):
+        """send_query should return MonitoringResponse on success."""
+        from common.monitoring_commands import send_query
+
+        resp = MonitoringResponse(
+            command=CMD_SYSTEM_STATUS,
+            status="OK",
+            message="all good",
+        )
+        mock_socket = MagicMock()
+        mock_socket.recv_string.return_value = resp.to_json()
+
+        query = MonitoringQuery(command=CMD_SYSTEM_STATUS)
+        result = send_query(mock_socket, query)
+
+        assert result is not None
+        assert result.status == "OK"

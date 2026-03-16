@@ -44,7 +44,7 @@ exclude = [
 "**/__init__.py" = ["F401"]
 
 [lint.isort]
-known-first-party = ["common", "pc1", "pc2", "pc3"]
+known-first-party = ["common", "pc1", "pc2", "pc3", "perf"]
 
 [format]
 quote-style = "double"

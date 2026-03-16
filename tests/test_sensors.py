@@ -351,3 +351,72 @@ class TestBrokerForwarding:
         broker_pub.close()
         analytics_sub.close()
         context.term()
+
+
+# =============================================================================
+# Test Area 4: Threaded Broker & Broker Mode Selection
+# =============================================================================
+
+
+class TestBrokerModeSelection:
+    """Tests for broker.py --mode argument parsing."""
+
+    def test_broker_mode_default_standard(self):
+        """Default broker mode should be 'standard'."""
+        from pc1.broker import parse_args
+
+        args = parse_args([])
+        assert args.mode == "standard"
+
+    def test_broker_mode_arg_standard(self):
+        """--mode standard should set mode to 'standard'."""
+        from pc1.broker import parse_args
+
+        args = parse_args(["--mode", "standard"])
+        assert args.mode == "standard"
+
+    def test_broker_mode_arg_threaded(self):
+        """--mode threaded should set mode to 'threaded'."""
+        from pc1.broker import parse_args
+
+        args = parse_args(["--mode", "threaded"])
+        assert args.mode == "threaded"
+
+
+class TestThreadedBrokerForwarding:
+    """Test that the threaded broker's inproc PUSH/PULL pipeline forwards messages."""
+
+    def test_threaded_inproc_forwarding(self):
+        """Messages through inproc PUSH/PULL should arrive intact."""
+        context = zmq.Context()
+
+        # Simulate the inproc pipeline used by the threaded broker
+        inproc_addr = "inproc://test_threaded_pipe"
+
+        # Collector side: PULL from inproc
+        pull = context.socket(zmq.PULL)
+        pull.bind(inproc_addr)
+
+        # Worker side: PUSH to inproc
+        push = context.socket(zmq.PUSH)
+        push.connect(inproc_addr)
+
+        time.sleep(0.1)
+
+        # Worker pushes a sensor message
+        test_msg = f"{TOPIC_CAMERA} " + json.dumps({"sensor_id": "CAM-T1", "test": True})
+        push.send_string(test_msg)
+
+        # Collector receives
+        pull.setsockopt(zmq.RCVTIMEO, 2000)
+        received = pull.recv_string()
+
+        assert received == test_msg
+        topic, payload = received.split(" ", 1)
+        assert topic == TOPIC_CAMERA
+        data = json.loads(payload)
+        assert data["sensor_id"] == "CAM-T1"
+
+        push.close()
+        pull.close()
+        context.term()

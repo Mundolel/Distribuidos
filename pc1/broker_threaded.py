@@ -156,6 +156,7 @@ def run_broker_threaded() -> None:
     Launch the multithreaded broker: one subscriber thread per sensor topic
     plus a collector thread that publishes to PC2.
     """
+    global _running
     config = get_config()
     context = zmq.Context()
 
@@ -202,7 +203,6 @@ def run_broker_threaded() -> None:
     except KeyboardInterrupt:
         pass
     finally:
-        global _running
         _running = False
         logger.info("Waiting for threads to finish...")
         for t in workers:
@@ -212,5 +212,9 @@ def run_broker_threaded() -> None:
         logger.info("Threaded broker shut down.")
 
 
-if __name__ == "__main__":
+def main(argv: list[str] | None = None) -> None:
     run_broker_threaded()
+
+
+if __name__ == "__main__":
+    main()

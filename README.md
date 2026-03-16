@@ -274,6 +274,14 @@ The default configuration has 8 sensors of each type (24 total) distributed acro
 | `health_check_timeout_ms` | 2000 | Timeout for each health check ping |
 | `health_check_max_retries` | 3 | Failed pings before declaring PC3 down |
 
+### Environment Variables (Docker Compose)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BROKER_MODE` | `standard` | Broker type: `standard` (single-thread) or `threaded` (multi-thread) |
+| `SENSOR_INTERVAL` | `0` | Sensor event interval in seconds (`0` = use config defaults per sensor type) |
+| `SENSOR_COUNT` | `0` | Number of sensors per type to launch (`0` = all from config) |
+
 ### ZMQ Ports
 
 | Port | Name | Used By |
@@ -394,10 +402,10 @@ The project requires comparing two broker designs under different load condition
 | **2A** | 2 of each type (6 total) | 5 seconds | Standard (single-thread) |
 | **2B** | 2 of each type (6 total) | 5 seconds | Multithreaded |
 
-> **Note:** Sensor count control (1 or 2 per type) requires Phase 7 implementation.
-> Currently `start_pc1.py` always launches all 8 sensors of each type from config.
-> The `SENSOR_INTERVAL` environment variable controls the generation interval for
-> all sensor types simultaneously.
+> **Note:** Use `SENSOR_COUNT` to control how many sensors of each type are launched.
+> `SENSOR_COUNT=0` (default) launches all 8 of each type from config.
+> `SENSOR_INTERVAL` controls the generation interval for all sensor types simultaneously.
+> `SENSOR_INTERVAL=0` (default) means "use each sensor type's configured default".
 
 ### Variables Measured
 
@@ -412,25 +420,43 @@ The project requires comparing two broker designs under different load condition
 
 ### Running Experiments
 
+#### Automated (recommended)
+
+The scenario runner automates all 4 experiments, collecting throughput and latency:
+
 ```bash
-# First, start the analytics and database services in the background
+# Build images first
+docker compose build
+
+# Run all 4 scenarios (2 minutes each by default)
+python -m perf.run_scenarios
+
+# Or with a custom duration
+python -m perf.run_scenarios --duration 60
+
+# Generate graphs from results
+python -m perf.generate_graphs
+```
+
+Results are saved to `benchmark_results/results.json` and graphs to `benchmark_results/graphs/`.
+
+#### Manual
+
+```bash
+# Start pc2 and pc3 in the background
 docker compose up -d pc2 pc3
 
-# Then run each scenario (pc1 runs in foreground).
-# Note: sensor count control (1 or 2 per type) is not yet implemented;
-# these commands currently run all 24 sensors with the specified interval.
+# Scenario 1A: 1 sensor/type, 10s interval, standard broker
+BROKER_MODE=standard SENSOR_INTERVAL=10 SENSOR_COUNT=1 docker compose up pc1
 
-# Scenario 1A: 10s interval, standard broker
-BROKER_MODE=standard SENSOR_INTERVAL=10 docker compose up pc1
+# Scenario 1B: 1 sensor/type, 10s interval, threaded broker
+BROKER_MODE=threaded SENSOR_INTERVAL=10 SENSOR_COUNT=1 docker compose up pc1
 
-# Scenario 1B: 10s interval, threaded broker
-BROKER_MODE=threaded SENSOR_INTERVAL=10 docker compose up pc1
+# Scenario 2A: 2 sensors/type, 5s interval, standard broker
+BROKER_MODE=standard SENSOR_INTERVAL=5 SENSOR_COUNT=2 docker compose up pc1
 
-# Scenario 2A: 5s interval, standard broker
-BROKER_MODE=standard SENSOR_INTERVAL=5 docker compose up pc1
-
-# Scenario 2B: 5s interval, threaded broker
-BROKER_MODE=threaded SENSOR_INTERVAL=5 docker compose up pc1
+# Scenario 2B: 2 sensors/type, 5s interval, threaded broker
+BROKER_MODE=threaded SENSOR_INTERVAL=5 SENSOR_COUNT=2 docker compose up pc1
 
 # Stop pc1 between scenarios (pc2 and pc3 stay running)
 docker compose stop pc1
@@ -444,6 +470,10 @@ docker compose down
 - **Standard** (`BROKER_MODE=standard`): Single-threaded broker using `zmq.Poller` to monitor all three sensor SUB sockets in a loop. Simple and predictable.
 
 - **Threaded** (`BROKER_MODE=threaded`): Each sensor topic gets its own subscriber thread. Threads forward messages via an `inproc://` PUSH/PULL pipeline to a collector thread that publishes to PC2. Higher concurrency but more overhead.
+
+### Latency Measurement
+
+Latency is measured end-to-end across processes using wall-clock timestamps. Each `SemaphoreCommand` carries a `created_at` field (`time.time()` at creation). When `traffic_light_control` applies the state change, it computes `latency_ms = (time.time() - command.created_at) * 1000` and logs it as `[LATENCY] INT-XX: N.NN ms`.
 
 ### Expected Analysis
 

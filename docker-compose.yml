@@ -12,6 +12,7 @@ services:
     environment:
       - BROKER_MODE=${BROKER_MODE:-standard}
       - SENSOR_INTERVAL=${SENSOR_INTERVAL:-0}
+      - SENSOR_COUNT=${SENSOR_COUNT:-0}
     restart: unless-stopped
 
   pc2:

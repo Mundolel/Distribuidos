@@ -7,6 +7,7 @@ transmission over ZMQ sockets.
 """
 
 import json
+import time
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 
@@ -148,6 +149,7 @@ class SemaphoreCommand:
     new_state: str  # "GREEN" or "RED"
     reason: str = ""  # Why the change is being made
     duration_override_sec: int | None = None  # Custom duration (None = default)
+    created_at: float = field(default_factory=time.time)  # Wall-clock for latency measurement
     timestamp: str = field(default_factory=now_iso)
 
     def to_json(self) -> str:
