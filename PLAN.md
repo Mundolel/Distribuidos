@@ -24,9 +24,10 @@ distribuidos/
 ├── common/
 │   ├── __init__.py
 │   ├── models.py                 # Data classes for events, commands
-│   ├── constants.py              # Ports, topics, congestion thresholds
+│   ├── constants.py              # Ports, topics, thresholds, states, timings
 │   ├── config_loader.py          # Config singleton loader
-│   └── db_utils.py               # SQLite helper (create tables, insert, query)
+│   ├── db_utils.py               # SQLite helper (create tables, insert, query)
+│   └── monitoring_commands.py    # Shared monitoring CLI commands and formatters
 ├── pc1/
 │   ├── __init__.py
 │   ├── sensors/
@@ -58,13 +59,20 @@ distribuidos/
 ├── requirements.txt
 ├── requirements-dev.txt          # Extends requirements.txt + ruff
 ├── ruff.toml                     # Linter/formatter configuration
+├── .coveragerc                    # Coverage config for pytest-cov
 ├── .github/
 │   └── workflows/
-│       └── ci.yml                # CI pipeline: ruff check + format + pytest
+│       ├── ci.yml                # CI: ruff check + format + pytest
+│       ├── test-coverage.yml     # CI: pytest with coverage report + artifact
+│       ├── config-consistency.yml # CI: validates city_config.json structure
+│       ├── docker-smoke.yml      # CI: Docker build + import validation
+│       ├── docker-integration.yml # CI: full ZMQ integration + failover test
+│       └── docker-sensor-count.yml # CI: validates SENSOR_COUNT env var
 ├── PLAN.md                       # This file - master development plan
 ├── phase3_plan.md                # Phase 3 design decisions
 ├── phase4_plan.md                # Phase 4 design decisions
 ├── phase5_plan.md                # Phase 5 design decisions
+├── monitoring_fallback.md        # Bug report: cross-PC import fix
 ├── README.md                     # Project readme with usage instructions
 ├── ideas.md                      # Post-project enhancement ideas (GUI, ESP32)
 ├── perf/
@@ -72,12 +80,12 @@ distribuidos/
 │   ├── run_scenarios.py          # Performance test scenario runner (Docker-based)
 │   └── generate_graphs.py        # Matplotlib chart generation from results
 └── tests/
-    ├── test_common.py            # 25 tests - models, config, DB utils
-    ├── test_sensors.py           # 19 tests - sensor event generation
-    ├── test_analytics.py         # 32 tests - analytics, rules, semaphore control
-    ├── test_monitoring.py        # 26 tests - DB primary, monitoring CLI, health check
+    ├── test_common.py            # 32 tests - models, config, DB utils, validation
+    ├── test_sensors.py           # 23 tests - sensor events, broker modes, threaded broker
+    ├── test_analytics.py         # 35 tests - analytics, rules, semaphore, green wave DB
+    ├── test_monitoring.py        # 33 tests - DB primary, monitoring CLI, fallback, errors
     ├── test_failover.py          # 15 tests - failover state, health checker, recovery
-    └── test_performance.py       # 18 tests - latency instrumentation, sensor count, graphs
+    └── test_performance.py       # 29 tests - latency, sensor count, graphs, launcher args
 ```
 
 ---
@@ -88,7 +96,7 @@ distribuidos/
 
 #### Step 1.1 - Project scaffolding
 - [x] Create the directory structure above
-- [x] Create `requirements.txt` with: `pyzmq`, `pyyaml`, `pytest`
+- [x] Create `requirements.txt` with: `pyzmq`, `pytest`, `matplotlib`
 - [x] Create base Dockerfiles for each PC
 
 #### Step 1.2 - Configuration system (`config/city_config.json`)
@@ -201,6 +209,8 @@ GPS event (EVENTO_DENSIDAD_DE_TRAFICO - Dt):
 ```json
 {
   "sensor_id": "GPS-C5",
+  "tipo_sensor": "gps",
+  "interseccion": "INT-C5",
   "nivel_congestion": "ALTA",
   "velocidad_promedio": 18,
   "timestamp": "2026-02-09T15:20:10Z"
@@ -245,7 +255,7 @@ Logic:
 1. Receive sensor event
 2. Evaluate rules per intersection:
    - **Normal traffic**: `Q < 5 AND Vp > 35 AND D < 20` -> standard 15s red cycle
-   - **Congestion detected**: `Q >= 10 OR Vp < 20 OR D >= 40` -> extend green by 10s on congested direction
+   - **Congestion detected**: `Q >= 10 OR Vp <= 20 OR D >= 40` -> extend green by 10s on congested direction
    - **Green wave (priority)**: User-triggered via monitoring -> force all semaphores on a route to green
 3. If state change needed, send command to semaphore control service
 4. PUSH event data to both databases
@@ -313,7 +323,7 @@ Logic:
 
 #### Step 5.3 - Testing failover
 - [x] 15 unit tests covering FailoverState, HealthChecker, push_to_dbs, full integration
-- [x] All 117 tests passing (`pytest tests/ -v`)
+- [x] All 167 tests passing (`pytest tests/ -v`)
 
 ---
 
@@ -401,7 +411,7 @@ volumes:
   - Latency grouped bar chart (with min/max error bars)
   - Per-scenario throughput and latency charts
   - Output to `benchmark_results/graphs/`
-- [x] 18 new unit tests in `tests/test_performance.py` (133 passed + 2 skipped without matplotlib)
+- [x] 29 unit tests in `tests/test_performance.py` (167 total tests passing)
 
 ---
 
