@@ -60,12 +60,17 @@ From the rubric (Excelente):
 ### 4. Fallback Monitoring CLI on PC2
 
 - The normal monitoring CLI runs on PC3, so when PC3 dies the user loses it
-- A fallback CLI runs on PC2 using the same `monitoring_service` code
+- A fallback CLI runs on PC2 reusing shared monitoring code
 - It connects to `tcp://127.0.0.1:5561` (analytics REP on localhost)
   instead of `tcp://pc2:5561`
 - The analytics REP handler already uses the local replica DB for all
   queries, so monitoring works transparently during failover
 - Accessible via: `docker exec -it pc2-analytics python -m pc2.monitoring_fallback`
+- **Note:** The shared CLI commands and formatters were extracted to
+  `common/monitoring_commands.py` after the initial implementation, to
+  resolve a cross-PC import issue in Docker (see `monitoring_fallback.md`).
+  Both `pc3/monitoring_service.py` and `pc2/monitoring_fallback.py` import
+  from `common.monitoring_commands`.
 
 ### 5. Recovery is Automatic (No DB Resync)
 

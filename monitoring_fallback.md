@@ -131,11 +131,11 @@ shared across all three PCs by design.
 
 ### Unit Tests
 
-All 135 tests pass after the refactoring:
+All 167 tests pass (135 at the time of this refactoring, 167 after Phase 7 additions):
 
 ```
 $ python -m pytest tests/ -v
-135 passed in 12.10s
+167 passed
 ```
 
 ### Lint

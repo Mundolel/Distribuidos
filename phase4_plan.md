@@ -68,12 +68,15 @@ wave for ambulance passage).
 - Additional: health check daemon thread on port 5565
 - Duplicated `process_envelope()` function (same 4 envelope types)
 
-### 2. `pc3/monitoring_service.py` (~350 lines)
-- Interactive CLI with menu loop
+### 2. `pc3/monitoring_service.py` (~140 lines after extraction)
+- Interactive CLI main loop and signal handling
 - REQ socket connects to `tcp://pc2:5561`
-- 6 monitoring commands + exit option
-- Pretty-print formatters for each response type
 - Timeout on recv (10s, `RCVTIMEO = 10000`) to avoid hanging if PC2 is down
+- **Note (post-Phase 5):** The 6 command handlers and pretty-print formatters
+  were extracted to `common/monitoring_commands.py` to resolve a cross-PC
+  import issue in Docker (see `monitoring_fallback.md`). Both
+  `pc3/monitoring_service.py` and `pc2/monitoring_fallback.py` now import
+  from `common.monitoring_commands` instead of having a cross-PC dependency.
 
 ### 3. `pc3/start_pc3.py` (~100 lines)
 - Launches `db_primary` as background subprocess
