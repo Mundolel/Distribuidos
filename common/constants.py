@@ -25,8 +25,8 @@ SENSOR_TYPE_GPS = "gps"
 # Congestion Level Thresholds (based on average speed - km/h)
 # =============================================================================
 CONGESTION_ALTA_MAX_SPEED = 10  # velocidad_promedio < 10 -> ALTA
-CONGESTION_NORMAL_MIN_SPEED = 11  # 11 <= velocidad_promedio <= 39 -> NORMAL
-CONGESTION_NORMAL_MAX_SPEED = 39
+CONGESTION_NORMAL_MIN_SPEED = 10  # 10 <= velocidad_promedio <= 40 -> NORMAL
+CONGESTION_NORMAL_MAX_SPEED = 40
 CONGESTION_BAJA_MIN_SPEED = 40  # velocidad_promedio > 40 -> BAJA
 
 # =============================================================================
