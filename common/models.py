@@ -46,7 +46,7 @@ def get_congestion_level(velocidad_promedio: float) -> str:
     """
     Determine congestion level based on average speed.
     - ALTA: speed < 10 km/h
-    - NORMAL: 11 <= speed <= 39 km/h
+    - NORMAL: 10 <= speed <= 40 km/h
     - BAJA: speed > 40 km/h
     """
     if velocidad_promedio < CONGESTION_ALTA_MAX_SPEED:
