@@ -329,6 +329,210 @@ This checks:
 
 ---
 
+## Viewing the Database (DB Browser for SQLite)
+
+Install on **VM2** and/or **VM3**:
+
+```bash
+sudo apt-get install -y sqlitebrowser
+```
+
+Open the databases:
+
+```bash
+# On VM3 (primary DB):
+sqlitebrowser ~/traffic-system/data/traffic_primary.db
+
+# On VM2 (replica DB):
+sqlitebrowser ~/traffic-system/data/traffic_replica.db
+```
+
+### Tables to inspect
+
+| Table | Contents |
+|-------|----------|
+| `sensor_events` | Raw sensor readings (camera, inductive, GPS) |
+| `congestion_history` | Analytics decisions (NORMAL / CONGESTION / GREEN_WAVE) |
+| `semaphore_states` | Traffic light state changes (NS/EW direction, reason) |
+| `priority_actions` | Green waves and forced semaphore changes |
+
+During normal operation both DBs have identical data. During failover (PC3 down), only VM2's replica keeps receiving inserts. If you only want to install it on one VM, pick **VM2** — it always has data.
+
+---
+
+## Tracing a Single Event Across All 3 VMs
+
+This section helps you **prove to the professor** that a single sensor event travels through the entire distributed pipeline: VM1 (generated) -> VM1 (broker forwarded) -> VM2 (analytics processed) -> VM2 (replica DB inserted) -> VM3 (primary DB inserted).
+
+### Recommended setup: minimal sensors + log files
+
+Start the system with only **1 sensor per type** so the output is clean and readable:
+
+```bash
+# VM2 (first) — save logs to file AND show on screen:
+cd ~/traffic-system/app
+bash deploy/start_vm2.sh 2>&1 | tee ~/traffic-system/data/vm2.log
+
+# VM3 (second) — save logs:
+cd ~/traffic-system/app
+bash deploy/start_vm3.sh 2>&1 | tee ~/traffic-system/data/vm3.log
+
+# VM1 (last) — 1 sensor per type, 10s interval, save logs:
+cd ~/traffic-system/app
+SENSOR_COUNT=1 SENSOR_INTERVAL=10 bash deploy/start_vm1.sh 2>&1 | tee ~/traffic-system/data/vm1.log
+```
+
+With `SENSOR_COUNT=1`, only 3 sensors run (CAM-A1, ESP-A2, GPS-A1), producing one event every ~3.3 seconds. Much easier to follow.
+
+### What each VM logs for one event
+
+The data flow for a camera event on intersection INT-A1 looks like this:
+
+**VM1 — Sensor generates and publishes:**
+```
+[CAM-A1 @ INT-A1] volumen=12, velocidad=25.3 km/h
+```
+
+**VM1 — Broker forwards to PC2:**
+```
+[FORWARD #7] topic=camara | size=198 bytes
+```
+
+**VM2 — Analytics receives, evaluates rules, makes decision:**
+```
+[EVENT #7] CAM-A1 @ INT-A1 -> state=NORMAL, decision=NO_ACTION (Q=12, Vp=25.3, D=5)
+```
+
+**VM2 — If congestion detected, semaphore control applies change:**
+```
+[INT-A1] NS: RED->GREEN, EW: GREEN->RED (reason: congestion detected, cycle: 25s)
+```
+
+**VM2 — Replica DB inserts the record:**
+```
+[INSERT sensor_event] CAM-A1 @ INT-A1 (CAMARA)
+[INSERT congestion_record] INT-A1 state=NORMAL decision=NO_ACTION
+```
+
+**VM3 — Primary DB inserts the same record:**
+```
+[INSERT sensor_event] CAM-A1 @ INT-A1 (CAMARA)
+[INSERT congestion_record] INT-A1 state=NORMAL decision=NO_ACTION
+```
+
+### Grep commands to filter one trace
+
+After running for a while, use these commands to extract a clean trace. Pick a specific sensor (e.g., `CAM-A1`) or intersection (e.g., `INT-A1`):
+
+**Filter by sensor ID — see one sensor's journey across all VMs:**
+
+```bash
+# VM1: sensor published + broker forwarded
+grep "CAM-A1" ~/traffic-system/data/vm1.log
+
+# VM2: analytics received + decision + DB replica insert
+grep "CAM-A1" ~/traffic-system/data/vm2.log
+
+# VM3: primary DB insert
+grep "CAM-A1" ~/traffic-system/data/vm3.log
+```
+
+**Filter by intersection — see everything happening at one intersection:**
+
+```bash
+# VM1: all sensors at INT-A1
+grep "INT-A1" ~/traffic-system/data/vm1.log
+
+# VM2: analytics + semaphore changes + DB inserts for INT-A1
+grep "INT-A1" ~/traffic-system/data/vm2.log
+
+# VM3: DB inserts for INT-A1
+grep "INT-A1" ~/traffic-system/data/vm3.log
+```
+
+**Show only the last N lines (most recent events):**
+
+```bash
+grep "CAM-A1" ~/traffic-system/data/vm1.log | tail -5
+grep "CAM-A1" ~/traffic-system/data/vm2.log | tail -5
+grep "CAM-A1" ~/traffic-system/data/vm3.log | tail -5
+```
+
+**Live filtering — watch events in real-time (open a second terminal on each VM):**
+
+```bash
+# VM1: watch camera sensor events as they happen
+tail -f ~/traffic-system/data/vm1.log | grep "CAM-A1"
+
+# VM2: watch analytics processing CAM-A1 events
+tail -f ~/traffic-system/data/vm2.log | grep "CAM-A1"
+
+# VM3: watch primary DB receiving CAM-A1 inserts
+tail -f ~/traffic-system/data/vm3.log | grep "CAM-A1"
+```
+
+### Demo script: trace one event end-to-end
+
+After running the system for at least 30 seconds, run this on each VM to show the professor a clean trace. It picks the **last 3 events** for sensor CAM-A1:
+
+**On VM1:**
+```bash
+echo "=== VM1: Sensor Generation + Broker Forward ==="
+grep "CAM-A1" ~/traffic-system/data/vm1.log | tail -3
+echo ""
+grep "FORWARD" ~/traffic-system/data/vm1.log | tail -3
+```
+
+**On VM2:**
+```bash
+echo "=== VM2: Analytics Processing + Replica DB Insert ==="
+grep "CAM-A1" ~/traffic-system/data/vm2.log | tail -3
+```
+
+**On VM3:**
+```bash
+echo "=== VM3: Primary DB Insert ==="
+grep "CAM-A1" ~/traffic-system/data/vm3.log | tail -3
+```
+
+### What the professor sees
+
+The timestamps prove the same event traveled across all 3 machines:
+
+1. **VM1** at `T=0.000s`: `[CAM-A1 @ INT-A1] volumen=12, velocidad=25.3 km/h` — sensor generated
+2. **VM1** at `T=0.001s`: `[FORWARD #7] topic=camara | size=198 bytes` — broker forwarded to VM2
+3. **VM2** at `T=0.003s`: `[EVENT #7] CAM-A1 @ INT-A1 -> state=NORMAL, decision=NO_ACTION` — analytics processed
+4. **VM2** at `T=0.005s`: `[INSERT sensor_event] CAM-A1 @ INT-A1 (CAMARA)` — replica DB stored
+5. **VM3** at `T=0.008s`: `[INSERT sensor_event] CAM-A1 @ INT-A1 (CAMARA)` — primary DB stored
+
+The same `CAM-A1` identifier appears on all 3 machines, proving the distributed PUB/SUB -> PUSH/PULL pipeline works.
+
+### Additional useful filters
+
+```bash
+# See only semaphore state changes (congestion responses):
+grep "NS:.*EW:" ~/traffic-system/data/vm2.log
+
+# See only congestion detections:
+grep "CONGESTION" ~/traffic-system/data/vm2.log
+
+# See only green wave activations:
+grep "GREEN_WAVE\|GREEN WAVE\|priority_action" ~/traffic-system/data/vm2.log
+
+# See failover/recovery events:
+grep "FAILOVER\|RECOVERY" ~/traffic-system/data/vm2.log
+
+# See latency measurements:
+grep "LATENCY" ~/traffic-system/data/vm2.log
+
+# Count total events processed per VM:
+grep -c "FORWARD" ~/traffic-system/data/vm1.log
+grep -c "EVENT #" ~/traffic-system/data/vm2.log
+grep -c "INSERT sensor_event" ~/traffic-system/data/vm3.log
+```
+
+---
+
 ## Updating Code Later
 
 If you push new changes to the branch, update all VMs:
