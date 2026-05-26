@@ -362,7 +362,7 @@ During normal operation both DBs have identical data. During failover (PC3 down)
 
 ## Tracing a Single Event Across All 3 VMs
 
-This section helps you **prove to the professor** that a single sensor event travels through the entire distributed pipeline: VM1 (generated) -> VM1 (broker forwarded) -> VM2 (analytics processed) -> VM2 (replica DB inserted) -> VM3 (primary DB inserted).
+This section helps you see that a single sensor event travels through the entire distributed pipeline: VM1 (generated) -> VM1 (broker forwarded) -> VM2 (analytics processed) -> VM2 (replica DB inserted) -> VM3 (primary DB inserted).
 
 ### Recommended setup: minimal sensors + log files
 
@@ -473,7 +473,7 @@ tail -f ~/traffic-system/data/vm3.log | grep "CAM-A1"
 
 ### Demo script: trace one event end-to-end
 
-After running the system for at least 30 seconds, run this on each VM to show the professor a clean trace. It picks the **last 3 events** for sensor CAM-A1:
+After running the system for at least 30 seconds, run this on each VM to show a clean trace. It picks the **last 3 events** for sensor CAM-A1:
 
 **On VM1:**
 ```bash
@@ -495,7 +495,7 @@ echo "=== VM3: Primary DB Insert ==="
 grep "CAM-A1" ~/traffic-system/data/vm3.log | tail -3
 ```
 
-### What the professor sees
+### What should be seen
 
 The timestamps prove the same event traveled across all 3 machines:
 
