@@ -168,15 +168,15 @@ class CityConfig:
 
     @property
     def pc1_host(self) -> str:
-        return self._config["network"]["pc1_host"]
+        return os.environ.get("PC1_HOST", self._config["network"]["pc1_host"])
 
     @property
     def pc2_host(self) -> str:
-        return self._config["network"]["pc2_host"]
+        return os.environ.get("PC2_HOST", self._config["network"]["pc2_host"])
 
     @property
     def pc3_host(self) -> str:
-        return self._config["network"]["pc3_host"]
+        return os.environ.get("PC3_HOST", self._config["network"]["pc3_host"])
 
     # =========================================================================
     # Convenience: Build ZMQ addresses
