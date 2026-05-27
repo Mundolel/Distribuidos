@@ -275,6 +275,7 @@ Wait 2 minutes, then Ctrl+C.
 ```bash
 source ~/traffic-system/venv/bin/activate
 export PYTHONPATH=~/traffic-system/app
+cd ~/traffic-system/app
 python -c "
 from common.db_utils import TrafficDB
 db = TrafficDB('$HOME/traffic-system/data/traffic_replica.db')
