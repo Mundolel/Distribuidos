@@ -66,7 +66,7 @@ signal.signal(signal.SIGTERM, _signal_handler)
 
 
 def generate_inductive_event(
-    sensor_id: str, intersection: str, interval_sec: int
+    sensor_id: str, intersection: str, interval_sec: float
 ) -> InductiveEvent:
     """Generate a random inductive loop event simulating vehicle count."""
     vehiculos = random.randint(INDUCTIVE_COUNT_MIN, INDUCTIVE_COUNT_MAX)
@@ -87,7 +87,7 @@ def generate_inductive_event(
 
 def run_inductive_sensor(
     sensors: list[dict[str, str]],
-    interval_sec: int,
+    interval_sec: float,
     pub_port: int,
 ) -> None:
     """
@@ -162,7 +162,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--interval",
-        type=int,
+        type=float,
         default=INDUCTIVE_INTERVAL_SEC,
         help=f"Measurement interval in seconds (default: {INDUCTIVE_INTERVAL_SEC})",
     )
