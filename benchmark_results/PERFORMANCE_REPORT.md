@@ -20,7 +20,7 @@
 
 ---
 
-## 2. Disenos Comparados
+## 2. Diseños Comparados
 
 El sistema implementa dos arquitecturas alternativas para el componente broker de PC1, que agrega los eventos de los 3 tipos de sensores y los reenvía a PC2:
 
@@ -178,7 +178,7 @@ Muestra la latencia promedio de cada escenario con barras de error (min/max). Se
 
 ## 6. Analisis de Resultados
 
-### 6.1 Cual diseno maneja mejor la carga alta?
+### 6.1 Cual diseño maneja mejor la carga alta?
 
 **El broker standard iguala o supera al threaded en todos los escenarios.**
 
