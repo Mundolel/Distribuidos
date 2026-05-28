@@ -1,0 +1,70 @@
+[
+  {
+    "scenario": "1A",
+    "broker_mode": "standard",
+    "sensor_count": 1,
+    "interval_sec": 10,
+    "duration_sec": 120,
+    "start_time": "2026-05-28T20:07:22Z",
+    "end_time": "2026-05-28T20:09:30Z",
+    "throughput_events": 62,
+    "latency_ms": {
+      "min": 0.61,
+      "max": 1.56,
+      "avg": 0.93,
+      "p95": 1.56,
+      "count": 17
+    }
+  },
+  {
+    "scenario": "1B",
+    "broker_mode": "threaded",
+    "sensor_count": 1,
+    "interval_sec": 10,
+    "duration_sec": 120,
+    "start_time": "2026-05-28T20:09:32Z",
+    "end_time": "2026-05-28T20:11:38Z",
+    "throughput_events": 48,
+    "latency_ms": {
+      "min": 0.61,
+      "max": 1.8,
+      "avg": 1.03,
+      "p95": 1.8,
+      "count": 16
+    }
+  },
+  {
+    "scenario": "2A",
+    "broker_mode": "standard",
+    "sensor_count": 2,
+    "interval_sec": 5,
+    "duration_sec": 120,
+    "start_time": "2026-05-28T20:11:41Z",
+    "end_time": "2026-05-28T20:13:50Z",
+    "throughput_events": 192,
+    "latency_ms": {
+      "min": 0.5,
+      "max": 1.7,
+      "avg": 0.91,
+      "p95": 1.2,
+      "count": 60
+    }
+  },
+  {
+    "scenario": "2B",
+    "broker_mode": "threaded",
+    "sensor_count": 2,
+    "interval_sec": 5,
+    "duration_sec": 120,
+    "start_time": "2026-05-28T20:13:53Z",
+    "end_time": "2026-05-28T20:16:10Z",
+    "throughput_events": 192,
+    "latency_ms": {
+      "min": 0.47,
+      "max": 2.4,
+      "avg": 1.04,
+      "p95": 1.71,
+      "count": 56
+    }
+  }
+]
